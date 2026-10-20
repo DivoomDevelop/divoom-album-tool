@@ -7,6 +7,8 @@ await mkdir('vendor',{recursive:true});
 for(const [name,source] of [['ffmpeg',require('ffmpeg-static')],['ffprobe',require('@ffprobe-installer/ffprobe').path]]) {
   await copyFile(source,path.join('vendor',name+(process.platform==='win32'?'.exe':'')));
   if(process.platform!=='win32')await chmod(path.join('vendor',name),0o755);
+  // Intel FFmpeg downloads are unsigned; sign before Tauri seals bundle resources.
+  if(process.platform==='darwin')execFileSync('codesign',['--force','--sign','-',path.join('vendor',name)],{stdio:'inherit'});
 }
 const rustc=process.env.RUSTC??path.join(process.env.USERPROFILE??process.env.HOME,'.cargo','bin','rustc'+(process.platform==='win32'?'.exe':''));
 const triple=process.env.TAURI_ENV_TARGET_TRIPLE??execFileSync(rustc,['--print','host-tuple'],{encoding:'utf8'}).trim();
