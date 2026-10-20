@@ -1,4 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
+import { getCurrentWebview } from '@tauri-apps/api/webview';
 import { listen } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { open, confirm, message } from '@tauri-apps/plugin-dialog';
@@ -7,8 +8,9 @@ import { importDialog, importFailureDialog, manageDialog } from './dialogs';
 const rpc=(method:string,...args:unknown[]):Promise<any>=>invoke('rpc',{method,args});
 const api:TimesFrameApi={
   discover:()=>rpc('discover'),recent:()=>rpc('recent'),connect:d=>rpc('connect',d),albums:(t,r)=>rpc('albums',t,r),photos:(t,c,s,r)=>rpc('photos',t,c,s,r),
-  importMedia:async()=>{
-    const selected=await open(importDialog());
+  storage:t=>rpc('storage',t),loadDraft:(t,a)=>rpc('loadDraft',t,a),saveDraft:(t,a,d)=>rpc('saveDraft',t,a,d),estimate:(t,e)=>rpc('estimate',t,e),duplicateMatches:(t,ids)=>rpc('duplicateMatches',t,ids),
+  importMedia:async(paths)=>{
+    const selected=paths??await open(importDialog());
     if(!selected)return [];
     const result=await rpc('import',Array.isArray(selected)?selected:[selected]);
     if(result.failures.length){const dialog=importFailureDialog(result.failures);await message(dialog.text,dialog.options);}
@@ -16,7 +18,7 @@ const api:TimesFrameApi={
   },
   importStatus:(t,ids,r)=>rpc('importStatus',t,ids,r),
   addToAlbum:(t,source,toClockId,ids)=>rpc('addToAlbum',t,source,toClockId,ids),
-  thumbnail:(t,p)=>rpc('thumbnail',t,p),preview:(t,p)=>rpc('preview',t,p),enqueue:(t,a,e)=>rpc('enqueue',t,a,e),enqueueBatch:(t,a,e,id)=>rpc('enqueueBatch',t,a,e,id),cancel:id=>rpc('cancel',id),
+  thumbnail:(t,p)=>rpc('thumbnail',t,p),preview:(t,p)=>rpc('preview',t,p),enqueue:(t,a,e)=>rpc('enqueue',t,a,e),enqueueBatch:(t,a,e,id,p)=>rpc('enqueueBatch',t,a,e,id,p),cancel:id=>rpc('cancel',id),
   manage:async(target,a,ids,removeOnly)=>{
     const dialog=manageDialog(a,ids.length,removeOnly);
     if(!await confirm(dialog.text,dialog.options))return;
@@ -26,3 +28,7 @@ const api:TimesFrameApi={
 };
 window.timesframe=api;
 export async function setWindowTitle(title:string){document.title=title;await getCurrentWindow().setTitle(title);}
+
+export function onFileDrop(callback:(paths:string[],x:number,y:number)=>void){
+ return getCurrentWebview().onDragDropEvent(event=>{if(event.payload.type==='drop')callback(event.payload.paths,event.payload.position.x/window.devicePixelRatio,event.payload.position.y/window.devicePixelRatio);});
+}

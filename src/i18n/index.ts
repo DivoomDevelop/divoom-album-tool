@@ -43,6 +43,8 @@ export function translate(language:Locale,key:MessageKey,parameters:Record<strin
 export const t=(key:MessageKey,parameters:Record<string,string|number>={})=>translate(locale,key,parameters);
 export const errorText=(error:unknown)=>typeof error==='string'?error:error instanceof Error?error.message:String(error??'');
 const errors:[RegExp,MessageKey][]=[
+  [/DEVICE_STORAGE_FULL/,'storageFullWarning'],
+  [/UPLOAD_INTERRUPTED/,'interruptedUpload'],[/INVALID_QUALITY/,'qualityInvalid'],[/INVALID_BACKGROUND/,'backgroundInvalid'],[/PHOTO_TOO_LARGE/,'oversizedPhoto'],[/DUPLICATE_CHOICE_REQUIRED/,'duplicateRequired'],
   [/ALBUM_DESTINATION_UNAVAILABLE/,'albumDestinationUnavailable'],[/ALBUM_SELECTION_STALE/,'albumSelectionStale'],[/ALBUM_ADD_PENDING/,'albumAddPending'],
   [/IMPORT_SELECTION_RULE/,'selectionConflict'],
   [/目前仅支持 TimsFrame|Only TimsFrame/,'errorUnsupported'],[/请输入有效的设备 IPv4/,'errorIp'],

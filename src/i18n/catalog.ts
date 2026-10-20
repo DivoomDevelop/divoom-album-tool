@@ -1,6 +1,7 @@
 // Each translated row follows the keys in its English section. Empty/missing rows are rejected.
 import { workflowEnglish, workflowCatalogs } from './workflow';
 import { albumEnglish, albumCatalogs } from './albums';
+import {enhancementsEnglish,enhancementsCatalogs} from './enhancements';
 import { framingEnglish, framingCatalogs } from './framing';
 const baseEnglish = {
   appName:'Divoom Album', slogan:'Bring every frame to life', tag:'LAN media manager', language:'Language',
@@ -14,7 +15,7 @@ const baseEnglish = {
   errorUnknown:'The operation failed. Technical details: {detail}', errorIp:'Enter a valid device IPv4 address.', errorSize:'The response exceeds the size limit.', errorHttp:'Device HTTP error: {status}', errorTimeout:'The device timed out. Refresh to check the result before retrying a write operation.', errorJson:'The device returned an invalid or incomplete response.', errorRejected:'The device did not confirm success.', errorDiscover:'Device discovery is unavailable. Enter the device IP manually.', errorScreen:'The device did not return a valid screen size. Update to firmware supporting local albums.', errorAlbums:'This firmware does not provide the local album list interface.', errorPath:'The device returned an unsupported media path.', errorUploadSize:'The video and preview exceed the device upload limit. Shorten the clip or update the firmware.',
   errorRotation:'Invalid rotation angle.', errorCrop:'The crop area is invalid or exceeds the source image.', errorRatio:'The crop ratio does not match the screen.', errorEven:'Video encoding requires even screen dimensions.', errorTrim:'Keep the clip within the source video and under 10 minutes, with the preview frame inside the clip.', errorVideoModel:'Video encoding is currently configured for AstroToo only.', errorTrack:'No readable image track was found in this file.', errorOutput:'The output image size or video preview validation failed.', errorLocal:'Only local albums can be managed.', errorSource:'The source file is no longer available. Import it again.', errorPending:'The device received the files, but saving is not confirmed. Refresh to check; do not upload again.', errorSelection:'Select valid media.', errorSystem:'Items cannot be removed from system albums.', errorService:'The local media service is unavailable. Restart the app.', errorUnsupported:'Only TimsFrame (510/511/512) and AstroToo (530) are supported.', errorOperation:'This operation is not supported.',
 } as const;
-export const english={...baseEnglish,...workflowEnglish,...albumEnglish,...framingEnglish};
+export const english={...baseEnglish,...enhancementsEnglish,...workflowEnglish,...albumEnglish,...framingEnglish};
 export type MessageKey = keyof typeof english;
 
 // Section boundaries match the blank-separated English groups above (13 / 10 / 14 / 17 /
@@ -197,5 +198,5 @@ export const catalogs:Record<string,Record<MessageKey,string>> = {en:{...english
 for(const [locale,row] of Object.entries(rows)){
   const values=row.trim().split(/\||\r?\n/),keys=Object.keys(baseEnglish);
   if(values.length!==keys.length||values.some(value=>!value.trim()))throw new Error(`Invalid locale catalog ${locale}: ${values.length}/${keys.length}`);
-  catalogs[locale]={...Object.fromEntries(keys.map((key,index)=>[key,values[index]])),...workflowCatalogs[locale],...albumCatalogs[locale],...framingCatalogs[locale]} as Record<MessageKey,string>;
+  catalogs[locale]={...Object.fromEntries(keys.map((key,index)=>[key,values[index]])),...enhancementsCatalogs[locale],...workflowCatalogs[locale],...albumCatalogs[locale],...framingCatalogs[locale]} as Record<MessageKey,string>;
 }

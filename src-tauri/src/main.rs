@@ -23,7 +23,7 @@ struct Worker {
 
 #[tauri::command]
 async fn rpc(state: tauri::State<'_, Worker>, method: String, args: Vec<Value>) -> Reply {
-    const METHODS: &[&str] = &["discover","recent","connect","albums","photos","import","importStatus","thumbnail","preview","enqueue","enqueueBatch","cancel","manage","addToAlbum","jobs"];
+    const METHODS: &[&str] = &["discover","recent","connect","albums","photos","import","importStatus","thumbnail","preview","enqueue","enqueueBatch","cancel","manage","addToAlbum","jobs","storage","loadDraft","saveDraft","estimate","duplicateMatches"];
     if !METHODS.contains(&method.as_str()) { return Err("不支持的操作".into()); }
     let id = state.next.fetch_add(1, Ordering::Relaxed);
     let (sender, receiver) = oneshot::channel();

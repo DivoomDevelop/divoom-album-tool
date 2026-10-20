@@ -27,6 +27,28 @@
 
 使用设备实际返回的尺寸、硬件型号与 ID。TimesFrame 当前上传入口限制整个 multipart 请求为 100 MiB，包含视频、封面、JSON 与各段头。PC 输出视频片段最长 10 分钟，并按文件容量限制降低长片码率。
 
+### 存储状态
+
+`DIVOOM_NET_COMM_DEVICE_GET_STORAGE_STATUS` 对应 `Device/GetStorageStatus`，通过同一控制入口查询：
+
+```json
+{"Command":"Device/GetStorageStatus","DeviceId":123456789}
+```
+
+成功响应使用 `Full` 字段：
+
+```json
+{"Command":"Device/GetStorageStatus","ReturnCode":0,"Full":1}
+```
+
+- `Full:0`：当前未触发设备空间不足标志。
+- `Full:1`：已满或剩余空间低于固件阈值。PC 显示明确警告，提示清理照片/视频并刷新状态。
+- 缺失、非法值或查询不可用：状态未知，不视为已满，也不据此推算剩余容量。
+
+PC 在连接、进入导入流程、刷新、上传任务完成或失败后更新状态；提交队列、每项开始处理及实际发送前重新查询。已知 `Full:1` 时不发送新文件；批量中途变满时，后续任务显示空间不足。仍可编辑、保存裁切草稿。清理后点击“刷新状态”，收到 `Full:0` 即恢复上传。
+
+存储警告独立于照片数量统计；相簿列表读取失败也不会覆盖已查询到的 `Full:1`。
+
 ### 相簿列表
 
 `Photo/GetLocalAlbumList` 沿用现有命令架构：在 `divoom_net_command_json.c` 的字符串表、PACK 表和 UNPACK 表注册，由 `divoom_net_app.c` 查询本机数据库，再通过现有打包及回包流程返回。HTTP 层不新增相簿业务分支，不调用云端相簿更新命令；云端 MQTT 断开时也允许本地回包。

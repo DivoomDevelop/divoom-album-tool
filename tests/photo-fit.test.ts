@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {mkdtemp,readFile,writeFile,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join,resolve,relative,isAbsolute} from 'node:path';
-import {editFromSettings,settingsFromEdit,outputDimensions} from '../src/importing';
+import {editFromSettings,settingsFromEdit,outputDimensions,resizeCrop} from '../src/importing';
 import {convert,run,validateEdit,filters} from '../backend/media';
 import type {Media,Target,Edit,PhotoFit} from '../src/shared';
 const device:Target={DeviceId:123456789,Hardware:511,DeviceName:'Fixture',DevicePrivateIP:'127.0.0.1',width:800,height:1280,port:9000,apiPath:'/divoom_api',maxUploadBytes:104857600,maxVideoSeconds:600};
@@ -43,6 +43,40 @@ test('real WebP fits preserve all four image edges, odd source dimensions, rotat
    for(const [u,v] of [[.04,.5],[.96,.5],[.5,.04],[.5,.96]]){
     const [sx,sy]=rotation===90?[v,1-u]:rotation===180?[1-u,1-v]:rotation===270?[1-v,u]:[u,v],wanted=color(sx,sy),offset=(Math.floor(v*expected.height)*expected.width+Math.floor(u*expected.width))*3;
     for(let c=0;c<3;c++)assert.ok(Math.abs(data[offset+c]-wanted[c])<18,`lost source edge at ${u},${v}, rotation ${rotation}`);
+   }
+  }
+ }finally{const inside=relative(resolve(tmpdir()),resolve(directory));assert.ok(inside&&!inside.startsWith('..')&&!isAbsolute(inside));await rm(directory,{recursive:true,force:true});}
+});
+
+
+test('corner resizing locks source proportions and the opposite corner at every boundary',()=>{
+ for(const [sw,sh] of [[1600,1200],[1080,1920],[10000,21]])for(const corner of ['nw','ne','sw','se'] as const){
+  const media={...photo,width:sw,height:sh},original=editFromSettings(media,device,{rotation:0,zoom:2,centerX:.5,centerY:.5});
+  for(const [px,py] of [[0,0],[sw,sh],[-sw,-sh],[2*sw,2*sh],[sw/2,sh/2]]){
+   const resized=resizeCrop(sw,sh,original,corner,px,py),edit=editFromSettings(media,device,{rotation:0,...resized});validateEdit(media,edit,device);
+   assert.ok(resized.zoom>=1&&resized.zoom<=5);assert.ok(Math.abs(edit.width/edit.height-sw/sh)<1e-9);
+   assert.ok(Math.abs(edit.x+(corner.endsWith('e')?0:edit.width)-(original.x+(corner.endsWith('e')?0:original.width)))<1e-7);
+   assert.ok(Math.abs(edit.y+(corner.startsWith('s')?0:edit.height)-(original.y+(corner.startsWith('s')?0:original.height)))<1e-7);
+  }
+ }
+});
+
+test('real off-center WebP crops match displayed rotation and both mirrors, and batch templates retain mirrors',async()=>{
+ const directory=await mkdtemp(join(tmpdir(),'divoom-mirror-')),ffmpeg=resolve('vendor/ffmpeg'+(process.platform==='win32'?'.exe':'')),ffprobe=resolve('vendor/ffprobe'+(process.platform==='win32'?'.exe':''));
+ try{
+  const width=320,height=240,pixels=Buffer.alloc(width*height*3),color=(u:number,v:number)=>[Math.round(30+u*180),Math.round(30+v*180),70];
+  for(let y=0;y<height;y++)for(let x=0;x<width;x++)pixels.set(color(x/width,y/height),(y*width+x)*3);
+  const path=join(directory,'gradient.ppm');await writeFile(path,Buffer.concat([Buffer.from(`P6\n${width} ${height}\n255\n`),pixels]));const media={...photo,path,width,height};
+  let index=0;
+  for(const rotation of [0,90,180,270])for(const flipX of [false,true])for(const flipY of [false,true]){
+   const edit=editFromSettings(media,device,{rotation,flipX,flipY,zoom:2,centerX:.35,centerY:.6});
+   const template=settingsFromEdit(media,device,edit),batch=editFromSettings({...media,id:'next',width:640,height:480},device,template);assert.equal(batch.flipX,flipX);assert.equal(batch.flipY,flipY);
+   const output=await convert(ffmpeg,ffprobe,media,edit,device,join(directory,String(index)),new AbortController().signal,()=>{}),raw=join(directory,`${index++}.rgb`);
+   await run(ffmpeg,['-v','error','-i',output.file,'-f','rawvideo','-pix_fmt','rgb24',raw]);const data=await readFile(raw),sw=rotation%180?height:width,sh=rotation%180?width:height;
+   for(const [u,v] of [[.2,.2],[.8,.2],[.2,.8],[.8,.8]]){
+    let ru=(edit.x+u*edit.width)/sw,rv=(edit.y+v*edit.height)/sh;if(flipX)ru=1-ru;if(flipY)rv=1-rv;
+    const [sx,sy]=rotation===90?[rv,1-ru]:rotation===180?[1-ru,1-rv]:rotation===270?[1-rv,ru]:[ru,rv],expected=color(sx,sy),offset=(Math.floor(v*output.height)*output.width+Math.floor(u*output.width))*3;
+    expected.forEach((value,c)=>assert.ok(Math.abs(data[offset+c]-value)<8,`${rotation}, ${flipX}, ${flipY}, channel ${c}`));
    }
   }
  }finally{const inside=relative(resolve(tmpdir()),resolve(directory));assert.ok(inside&&!inside.startsWith('..')&&!isAbsolute(inside));await rm(directory,{recursive:true,force:true});}

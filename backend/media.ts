@@ -27,6 +27,9 @@ export function validateEdit(media:Media,edit:Edit,target:Pick<Target,'width'|'h
   const sw=edit.rotation%180?media.height:media.width,sh=edit.rotation%180?media.width:media.height;
   const values=[edit.x,edit.y,edit.width,edit.height,edit.start,edit.end,edit.coverTime];
   if(values.some(n=>!Number.isFinite(n))||edit.x<0||edit.y<0||edit.width<2||edit.height<2||edit.x+edit.width>sw+1||edit.y+edit.height>sh+1)throw new Error('裁剪区域超出原图范围');
+  if((edit.flipX!==undefined&&typeof edit.flipX!=='boolean')||(edit.flipY!==undefined&&typeof edit.flipY!=='boolean'))throw new Error('裁剪区域无效');
+  if(edit.quality!==undefined&&(!Number.isInteger(edit.quality)||edit.quality<30||edit.quality>100))throw new Error('INVALID_QUALITY');
+  if(edit.background!==undefined&&!['none','blur','black','white'].includes(edit.background))throw new Error('INVALID_BACKGROUND');
   const fit=edit.fit??'crop';
   if(!['crop','width','height'].includes(fit))throw new Error('裁剪比例与目标屏幕不一致');
   const aspect=sw/sh;
@@ -37,7 +40,11 @@ export function validateEdit(media:Media,edit:Edit,target:Pick<Target,'width'|'h
 export function filters(edit:Edit,target:Pick<Target,'width'|'height'>,kind:Media['kind']='video'):string {
   const rotate=edit.rotation===90?['transpose=1']:edit.rotation===180?['hflip','vflip']:edit.rotation===270?['transpose=2']:[];
   const size=outputDimensions(edit,target,kind);
-  return [...rotate,`crop=${edit.width}:${edit.height}:${edit.x}:${edit.y}:exact=1`,`scale=${size.width}:${size.height}:flags=lanczos`,'setsar=1'].join(',');
+  const base=[...rotate,...(edit.flipX?['hflip']:[]),...(edit.flipY?['vflip']:[]),`crop=${edit.width}:${edit.height}:${edit.x}:${edit.y}:exact=1`].join(',');
+  if(!edit.background||edit.background==='none')return `${base},scale=${size.width}:${size.height}:flags=lanczos,setsar=1`;
+  const foreground=outputDimensions({...edit,background:'none'},target,kind);
+  if(edit.background!=='blur')return `${base},scale=${foreground.width}:${foreground.height}:flags=lanczos,pad=${size.width}:${size.height}:(ow-iw)/2:(oh-ih)/2:color=${edit.background},setsar=1`;
+  return `${base},split[back][front];[back]scale=${size.width}:${size.height}:force_original_aspect_ratio=increase,crop=${size.width}:${size.height},boxblur=20:2[blurred];[front]scale=${foreground.width}:${foreground.height}:flags=lanczos[sharp];[blurred][sharp]overlay=(W-w)/2:(H-h)/2,setsar=1`;
 }
 export function videoEncoding(target:Pick<Target,'Hardware'|'maxUploadBytes'>,duration:number):{fps:number;args:string[]} {
   if(target.Hardware===530)return {fps:30000/1001,args:['-an','-c:v','libx264','-profile:v','baseline','-level:v','2.1','-pix_fmt','yuv420p','-r','30000/1001','-b:v','1000k','-maxrate','1500k','-bufsize','3000k','-g','60']};
@@ -57,7 +64,7 @@ export async function convert(ffmpeg:string,ffprobe:string,media:Media,edit:Edit
   const common=['-y','-hide_banner','-loglevel','error'];
   // Match the app's WebP photo path; device JPEG thumbnail conversion can mix
   // RGB565 output with the BGRA input expected by WebPEncodeBGRA.
-  if(media.kind==='photo')await run(ffmpeg,[...common,'-i',media.path,'-vf',filters(edit,target,'photo'),'-frames:v','1','-c:v','libwebp','-quality','90','-preset','picture',file],signal);
+  if(media.kind==='photo')await run(ffmpeg,[...common,'-i',media.path,'-vf',filters(edit,target,'photo'),'-frames:v','1','-c:v','libwebp','-quality',String(edit.quality??90),'-preset','picture',file],signal);
   else{
     const duration=edit.end-edit.start,encoding=videoEncoding(target,duration);
     const vf=target.Hardware===530?filters(edit,target):filters(edit,target).replace(':flags=lanczos',':flags=lanczos:out_color_matrix=bt709:out_range=tv');

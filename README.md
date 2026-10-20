@@ -6,7 +6,7 @@
 
 | Operating system | Installer | Version and requirements |
 | --- | --- | --- |
-| Windows | **[Download Windows installer (EXE)](https://github.com/DivoomDevelop/divoom-album-tool/releases/download/v0.3.7/DivoomAlbum-0.3.7-x64-setup.exe)** | v0.3.7 · Windows 10/11, 64-bit (x64), WebView2 required |
+| Windows | **[Download Windows installer (EXE)](https://github.com/DivoomDevelop/divoom-album-tool/releases/download/v0.3.9/DivoomAlbum-0.3.9-x64-setup.exe)** | v0.3.9 · Windows 10/11, 64-bit (x64), WebView2 required |
 | Mac with Apple silicon | **[Download Mac Apple silicon installer (DMG)](https://github.com/DivoomDevelop/divoom-album-tool/releases/download/v0.3.6/DivoomAlbum-macos-arm64-v0.3.6.dmg)** | v0.3.6 · M-series chip, macOS 13.5 or later |
 | Mac with Intel processor | **[Download Mac Intel installer (DMG)](https://github.com/DivoomDevelop/divoom-album-tool/releases/download/v0.3.6/DivoomAlbum-macos-x64-v0.3.6.dmg)** | v0.3.6 · Intel processor, macOS 13.5 or later |
 
@@ -14,7 +14,7 @@ Windows: download the EXE, double-click it, and follow the installation prompts.
 
 Connect your computer and device to the same local network. Supported devices: TimsFrame (510/511/512) and AstroToo (530).
 
-[Windows portable ZIP](https://github.com/DivoomDevelop/divoom-album-tool/releases/download/v0.3.7/DivoomAlbum-win-x64-v0.3.7.zip) (extract the entire archive, then run `DivoomAlbum.exe`) · [All releases, release notes, and SHA-256 checksums](https://github.com/DivoomDevelop/divoom-album-tool/releases)
+[Windows portable ZIP](https://github.com/DivoomDevelop/divoom-album-tool/releases/download/v0.3.9/DivoomAlbum-win-x64-v0.3.9.zip) (extract the entire archive, then run `DivoomAlbum.exe`) · [All releases, release notes, and SHA-256 checksums](https://github.com/DivoomDevelop/divoom-album-tool/releases)
 
 Built with **Tauri 2 + React + TypeScript**. The media service runs as a separate process bundled with the app. Node.js, FFmpeg, and ffprobe are included; users do not need to install these dependencies separately.
 
@@ -29,12 +29,30 @@ Starting with v0.3.7, Windows logs are written to the `logs/` folder next to `Di
 
 If the device is connected but no albums appear, click "Refresh albums" to query it again; the button remains available even when the album list is empty. Reproduce the issue once, then compress the entire `logs` folder for analysis. `cache.json.hit` with `count:0` indicates an empty cached result; `command.response` shows the device's actual response, while `command.error`/`rpc.error` records API errors.
 
+## v0.3.9 storage full warning
+
+The app queries `Device/GetStorageStatus`, mapped by firmware to `DIVOOM_NET_COMM_DEVICE_GET_STORAGE_STATUS`. `Full:1` displays a clear storage warning in the library and import/editor screens. Upload submission and each queued file recheck the device; no new file is sent while storage is reported full. Crop edits can still be saved. Delete unwanted media on the device, then choose Refresh status to resume after `Full:0`. Unsupported or invalid responses remain unknown.
+
+Windows v0.3.9 includes the feedback improvements below. Download the installer or portable ZIP above; macOS downloads remain at v0.3.6.
+
+## v0.3.8 feedback improvements
+
+Windows v0.3.8 local builds add editing drafts and upload history that survive restarts, automatic recovery of the last device/album/editor, and an upload queue that remains visible while switching albums. Waiting/converting jobs resume; interrupted uploads require checking the device before another upload to avoid duplicates.
+
+- Crop by dragging any of the four corner grips. Separate view-zoom buttons magnify the editing view without changing the crop. Rotation, horizontal/vertical mirrors, and edited-photo markers remain available.
+- Choose WebP quality (80 is recommended), see the actual encoded file size and the device upload limit, and use the original proportions or a blurred-photo, black, or white background filling the device canvas.
+- Choose automatic, light, or dark appearance. The editor adapts to available window height; all 19 languages were checked at 1100 × 760.
+- Drop local files onto an album to import. Confirmed source-content duplicates offer skip, keep both, or replace. Replacement confirms the new copy first. A normal album removes only old references; replacement in All Photos permanently deletes old copies and their album references.
+- The sidebar shows photo/video counts and firmware storage status. Exact free space and estimated remaining photo count require `FreeBytes` from firmware. Firmware returning only `Full` shows the space value as unavailable.
+
+These improvements are included in the Windows v0.3.9 release. Updated macOS packages have not been built; the existing macOS v0.3.6 downloads remain available.
+
 ## Usage
 
 1. Connect your computer and device to the same local network. Click "Refresh devices" to select a device, or connect using "Manual IP".
 2. The app first calls `Device/GetHardwareVersion` to read the actual screen dimensions, then loads the local albums.
 3. Select an album, open the import screen, and click "Choose files…". Photos and videos appear together. You can select multiple photos; selecting a video limits that import to a single video. The selection rules are shown below the list. The default filter is "Not uploaded only"; you can switch to "All".
-4. Photos support proportional cropping, fit to width, and fit to height. All modes preserve the original aspect ratio and may produce different export dimensions. JPG capture orientation is detected when reading dimensions, so portrait photos remain upright. Fit to width and fit to height change the zoom level of the editing view; you can scroll to inspect areas outside the viewport. Exports preserve the original aspect ratio within the selected device's actual width and height limits; an uncropped photo may produce the same dimensions in different modes. For example, an 800×1280 device exports a 4:3 landscape photo at 800×600 and a 3:4 portrait photo at 800×1066; a 480×480 device exports the landscape photo at 480×360. The crop frame always locks to the original aspect ratio and can be dragged to adjust framing; the preview shows the actual export dimensions. Edit photos individually, apply the first photo's template to a batch, or make individual adjustments afterward. Videos use the same proportional cropping and width/height fit modes and may also produce different dimensions. Each video and its WebP cover share the same dimensions, rounded to even pixel counts for encoding. For example, a 1080×1920 video exports at 720×1280 on an 800×1280 device, or at 800×450 after rotating to landscape. Choose start/end times and a cover frame; the maximum duration is **10 minutes**.
+4. Photos support proportional cropping, fit to width, and fit to height. All modes preserve the original aspect ratio and may produce different export dimensions. JPG capture orientation is detected when reading dimensions, so portrait photos remain upright. The full underlying image stays visible; switching among the three fit buttons does not enlarge it. Drag the crop frame to move it, or drag any of its four clearly marked corner handles to resize it while preserving the original aspect ratio; the zoom slider has been removed. Rotation and horizontal/vertical mirroring apply consistently to the preview, the first-photo batch template, and the exported file. Thumbnails show modified/unmodified status, updated after editing, saving, or applying batch settings. Simply viewing a photo does not mark it as modified; returning to file selection and reopening the editor preserves the current settings and markers. Exports preserve the original aspect ratio within the selected device's actual width and height limits; an uncropped photo may produce the same dimensions in different modes. For example, an 800×1280 device exports a 4:3 landscape photo at 800×600 and a 3:4 portrait photo at 800×1066; a 480×480 device exports the landscape photo at 480×360. The crop frame always locks to the original aspect ratio and can be dragged to adjust framing; the preview shows the actual export dimensions. Edit photos individually, apply the first photo's template to a batch, or make individual adjustments afterward. Videos use the same proportional cropping and width/height fit modes and may also produce different dimensions. Each video and its WebP cover share the same dimensions, rounded to even pixel counts for encoding. For example, a 1080×1920 video exports at 720×1280 on an 800×1280 device, or at 800×450 after rotating to landscape. Choose start/end times and a cover frame; the maximum duration is **10 minutes**.
 5. Saving adds the media to the conversion/upload queue. Photos are exported as WebP. Each video and its WebP preview image are uploaded in one multipart request, with `PhotoTitle` fixed to an empty string. An item is marked complete only after it is confirmed in both the target album and "All photos"; the current device's list is then refreshed. The local export directory contains `upload-receipt.json` with filenames and stored IDs for verification. Submitting the same batch repeatedly does not add duplicate queue entries.
 6. Select media to add it to another album (keeping the original album and files, and skipping existing target entries), remove it from an album, or delete it permanently. Permanent deletion removes the device files and their references. Original files on your computer are never modified.
 
