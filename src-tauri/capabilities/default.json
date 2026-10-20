@@ -1,0 +1,6 @@
+{
+  "identifier":"default",
+  "description":"Local TimesFrame window and native file dialogs",
+  "windows":["main"],
+  "permissions":["core:default","core:window:allow-set-title","dialog:allow-open","dialog:allow-confirm","dialog:allow-message"]
+}

@@ -1,0 +1,23 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Divoom Album",
+  "version": "0.3.2",
+  "identifier": "com.divoom.timesframe",
+  "build": {
+    "beforeDevCommand": "npm run build",
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [{"title":"Divoom 相簿","width":1480,"height":960,"minWidth":1100,"minHeight":760}],
+    "security": {"csp":"default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: http://127.0.0.1:*; media-src 'self' blob: http://127.0.0.1:*; connect-src ipc: http://ipc.localhost http://127.0.0.1:*"}
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["nsis","dmg","app"],
+    "externalBin": ["binaries/timesframe-worker"],
+    "resources": {"../dist-backend/worker.cjs":"worker.cjs","../vendor/":"bin/","../THIRD_PARTY_NOTICES.md":"THIRD_PARTY_NOTICES.md"},
+    "windows": {"nsis":{"displayLanguageSelector":true,"languages":["English","SimpChinese","TradChinese","Japanese","German","Thai","Russian","Korean","Vietnamese","French","Turkish","Spanish","Portuguese","Indonesian","Italian","Ukrainian","Swedish","Danish","Polish"],"customLanguageFiles":{"Thai":"installer/Thai.nsh","Indonesian":"installer/Indonesian.nsh","Danish":"installer/Danish.nsh","Polish":"installer/Polish.nsh"}}},
+    "macOS": {"minimumSystemVersion":"11.0"}
+  }
+}

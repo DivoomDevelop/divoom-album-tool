@@ -1,0 +1,7 @@
+Use case: precise-object-edit
+Asset type: TimesFrame desktop media library UI mockup revision.
+Input images: Image 1 is the edit target, existing main application design.
+Primary request: Add one clearly readable persistent LAN connection hint in the LEFT DEVICE CONNECTION AREA, immediately below the "刷新设备" button and above the album list. Use a restrained pale blue information card with a small information/network icon.
+Text (verbatim): "仅支持连接与此 PC 处于同一局域网的设备"
+Supporting smaller text: "请确保 PC 和设备连接到同一局域网。"
+Constraints: change only the device-area layout as needed to fit this information card; shift the album list slightly down. Preserve TimesFrame title, device card, photo/video gallery, right file details panel, upload queue, overall light style, typography, colors and window layout. Keep the exact LAN hint readable at normal desktop scale. Do not add modal dialogs, do not change gallery content.

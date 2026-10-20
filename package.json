@@ -1,0 +1,36 @@
+{
+  "name": "timesframe",
+  "version": "0.3.2",
+  "private": true,
+  "description": "Divoom Album LAN photo and video manager",
+  "author": "Divoom",
+  "scripts": {
+    "build": "tsc --noEmit && vite build && node scripts/build-backend.mjs",
+    "start": "npm run prepare:tauri && tauri dev",
+    "dev": "npm run start",
+    "prepare:tauri": "node scripts/prepare-binaries.mjs",
+    "test": "tsx --test tests/*.test.ts",
+    "test:sim": "tsx scripts/test-simulator.ts",
+    "pack": "npm run prepare:tauri && tauri build --no-bundle",
+    "dist:win": "npm run prepare:tauri && tauri build --bundles nsis",
+    "dist:mac": "npm run prepare:tauri && tauri build --bundles app,dmg"
+  },
+  "dependencies": {
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "@tauri-apps/api": "^2.0.0",
+    "@tauri-apps/plugin-dialog": "^2.0.0",
+    "ffmpeg-static": "^5.3.0",
+    "@ffprobe-installer/ffprobe": "^2.1.2"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@tauri-apps/cli": "^2.0.0",
+    "esbuild": "^0.28.0",
+    "tsx": "^4.20.0",
+    "typescript": "^5.9.0",
+    "vite": "^8.3.4"
+  }
+}
