@@ -16,7 +16,7 @@ if(windows){
  for(const item of ['timesframe-worker.exe','worker.cjs','bin','THIRD_PARTY_NOTICES.md'])await cp(join(build,item),join(folder,item),{recursive:true});
  await cp('README.md',join(folder,'README.md'));
  const zip=join(root,name+'.zip');
- execFileSync('powershell',['-NoProfile','-Command',`Compress-Archive -LiteralPath '${folder.replaceAll("'","''")}' -DestinationPath '${zip.replaceAll("'","''")}'`]);files.push(zip);
+ execFileSync('pwsh',['-NoProfile','-Command',`Compress-Archive -LiteralPath '${folder.replaceAll("'","''")}' -DestinationPath '${zip.replaceAll("'","''")}'`]);files.push(zip);
  const setup=join(root,`DivoomAlbum-${version}-x64-setup.exe`);
  await cp(join(build,'bundle/nsis',`Divoom Album_${version}_x64-setup.exe`),setup);files.push(setup);
  executable=folder;resources=folder;
