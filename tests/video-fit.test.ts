@@ -20,7 +20,7 @@ test('video fit, zoom and rotation preserve source proportions and bound even ou
  assert.throws(()=>validateEdit(video,{...editFromSettings(video,target),width:800,height:1280},target));
 });
 test('real H.265/H.264 exports and selected covers retain geometry, trim, rotation and frame content',async()=>{
- const directory=await mkdtemp(join(tmpdir(),'divoom-video-fit-')),ffmpeg=resolve('vendor/ffmpeg.exe'),ffprobe=resolve('vendor/ffprobe.exe');
+ const directory=await mkdtemp(join(tmpdir(),'divoom-video-fit-')),ffmpeg=resolve('vendor/ffmpeg'+(process.platform==='win32'?'.exe':'')),ffprobe=resolve('vendor/ffprobe'+(process.platform==='win32'?'.exe':''));
  try{
   const width=360,height=640,pixels=Buffer.alloc(width*height*3);
   for(let y=0;y<height;y++)for(let x=0;x<width;x++)pixels.set(x<30?[220,30,30]:x>330?[30,30,220]:y<30?[220,210,30]:y>610?[220,30,210]:Math.hypot(x-180,y-320)<70?[30,210,30]:[200,200,200],(y*width+x)*3);

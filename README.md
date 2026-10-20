@@ -78,7 +78,7 @@ npx tsx scripts/test-video-profiles.ts
 
 `test-device-cache.ts` 默认只读验证用户指定的 `192.168.13.142`，可通过 `DIVOOM_TEST_IP` 修改。第二阶段重启媒体进程并禁止 HTTP/fetch，验证磁盘缓存复用。`ui-languages.ts` 需先以 `TIMESFRAME_UI_TEST=1` 启动 debug Tauri；检查全部语言、真机缩略图和裁剪布局。该模式使用独立 WebView/媒体服务测试数据，release 不启用调试端口。
 
-本机只能实测 Windows；macOS 打包配置已提供，不能视为已在 Mac 上测试。x64 仿真曾在原有 MQTT 遗嘱主题代码中发生指针异常，因此使用项目规定的 x86 仿真进行验收；没有修改或跳过该 MQTT 模块。
+最终平台发行包由 GitHub Actions 在 Windows x64、macOS Apple Silicon 和 macOS Intel 原生环境构建，运行媒体转换与打包后服务验证。macOS 要求 13.5 或更新版本，安装包使用 ad-hoc 签名，尚未通过 Apple 公证。首次打开可能需要在系统“隐私与安全性”中允许打开。x64 仿真曾在原有 MQTT 遗嘱主题代码中发生指针异常，因此使用项目规定的 x86 仿真进行验收；没有修改或跳过该 MQTT 模块。
 
 ## 设计资源
 

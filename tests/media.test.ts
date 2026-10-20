@@ -8,7 +8,7 @@ import { MAX_UPLOAD_BYTES, type Target } from '../src/shared';
 
 test('photo export is a real 480x360 WebP with correct color and no duplicate cover',async()=>{
   const directory=await mkdtemp(join(tmpdir(),'divoom-webp-'));
-  const ffmpeg=resolve('vendor/ffmpeg.exe'),ffprobe=resolve('vendor/ffprobe.exe');
+  const ffmpeg=resolve('vendor/ffmpeg'+(process.platform==='win32'?'.exe':'')),ffprobe=resolve('vendor/ffprobe'+(process.platform==='win32'?'.exe':''));
   const target:Target={DeviceId:123,Hardware:530,DeviceName:'Test',DevicePrivateIP:'127.0.0.1',width:480,height:480,port:9000,apiPath:'/divoom_api',maxUploadBytes:MAX_UPLOAD_BYTES,maxVideoSeconds:1800};
   try{
     // Distinct color bands expose RGB565/BGRA confusion, double images and half-height data.

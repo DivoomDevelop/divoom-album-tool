@@ -14,7 +14,7 @@ function exif(orientation:number,little:boolean){
  return Buffer.concat([Buffer.from([0xff,0xe1,0,34]),Buffer.from('Exif\0\0'),tiff]);
 }
 test('all eight JPEG EXIF orientations match the decoder and retain proportions through WebP export',async()=>{
- const directory=await mkdtemp(join(tmpdir(),'divoom-orientation-')),ffmpeg=resolve('vendor/ffmpeg.exe'),ffprobe=resolve('vendor/ffprobe.exe');
+ const directory=await mkdtemp(join(tmpdir(),'divoom-orientation-')),ffmpeg=resolve('vendor/ffmpeg'+(process.platform==='win32'?'.exe':'')),ffprobe=resolve('vendor/ffprobe'+(process.platform==='win32'?'.exe':''));
  const target:Target={DeviceId:123,Hardware:511,DeviceName:'Test',DevicePrivateIP:'127.0.0.1',width:800,height:1280,port:9000,apiPath:'/divoom_api',maxUploadBytes:104857600,maxVideoSeconds:600};
  try{
   const ppm=join(directory,'source.ppm'),pixels=Buffer.alloc(640*480*3);

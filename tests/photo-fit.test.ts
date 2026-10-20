@@ -30,7 +30,7 @@ test('photo and video crops retain the original ratio with a shared fit selectio
  for(const fit of ['crop','width','height'] as const){const cropped=editFromSettings(photo,device,{fit,rotation:0,zoom:2,centerX:.4,centerY:.6});validateEdit(photo,cropped,device);assert.equal(cropped.width/photo.width,.5);assert.equal(cropped.height/photo.height,.5);assert.equal(settingsFromEdit(photo,device,cropped).zoom,2);}
 });
 test('real WebP fits preserve all four image edges, odd source dimensions, rotation and device limits',async()=>{
- const directory=await mkdtemp(join(tmpdir(),'divoom-fit-')),ffmpeg=resolve('vendor/ffmpeg.exe'),ffprobe=resolve('vendor/ffprobe.exe');
+ const directory=await mkdtemp(join(tmpdir(),'divoom-fit-')),ffmpeg=resolve('vendor/ffmpeg'+(process.platform==='win32'?'.exe':'')),ffprobe=resolve('vendor/ffprobe'+(process.platform==='win32'?'.exe':''));
  try{
   const width=641,height=479,pixels=Buffer.alloc(width*height*3),color=(x:number,y:number)=>x<.1?[220,30,30]:x>.9?[30,30,220]:y<.1?[30,210,30]:y>.9?[220,210,30]:[210,210,210];
   for(let y=0;y<height;y++)for(let x=0;x<width;x++)pixels.set(color(x/width,y/height),(y*width+x)*3);

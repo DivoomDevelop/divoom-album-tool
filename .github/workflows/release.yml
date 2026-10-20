@@ -1,0 +1,93 @@
+name: Final platform release
+on:
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: final-platform-release
+  cancel-in-progress: false
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: version
+        shell: bash
+        run: |
+          version=$(node -p "require('./package.json').version")
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          test "$(git rev-parse v$version)" = "$GITHUB_SHA"
+          gh release view "v$version" || gh release create "v$version" --verify-tag --draft --title "Divoom Album v$version" --notes-file docs/release-notes.md
+        env:
+          GH_TOKEN: ${{ github.token }}
+  build:
+    needs: prepare
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-2022
+            platform: win-x64
+            command: dist:win
+          - os: macos-15
+            platform: macos-arm64
+            command: dist:mac
+          - os: macos-15-intel
+            platform: macos-x64
+            command: dist:mac
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    env:
+      MACOSX_DEPLOYMENT_TARGET: '13.5'
+      APPLE_SIGNING_IDENTITY: '-'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.14.0'
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+      - run: npm ci
+      - run: npm run prepare:tauri
+      - run: npm test
+      - run: npm run ${{ matrix.command }}
+      - run: node scripts/package-platform.mjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.platform }}
+          path: |
+            release/*.zip
+            release/*.exe
+            release/*.dmg
+            release/SHA256SUMS-*.txt
+            artifacts/packaged-upload-*/report.json
+          compression-level: 0
+      - shell: bash
+        run: gh release upload "v${{ needs.prepare.outputs.version }}" release/*.zip release/*.${{ runner.os == 'Windows' && 'exe' || 'dmg' }} release/SHA256SUMS-*.txt --clobber
+        env:
+          GH_TOKEN: ${{ github.token }}
+  publish:
+    needs: [prepare, build]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: platform-artifacts
+      - shell: bash
+        run: |
+          mkdir -p release
+          cat platform-artifacts/*/release/SHA256SUMS-*.txt > "release/SHA256SUMS-v${{ needs.prepare.outputs.version }}.txt"
+          git archive --format=zip --prefix=DivoomAlbum/ -o "release/DivoomAlbum-source-v${{ needs.prepare.outputs.version }}.zip" HEAD
+          sha256sum release/*source*.zip | sed 's@release/@@' >> "release/SHA256SUMS-v${{ needs.prepare.outputs.version }}.txt"
+          gh release upload "v${{ needs.prepare.outputs.version }}" release/* --clobber
+          gh release edit "v${{ needs.prepare.outputs.version }}" --draft=false --latest
+        env:
+          GH_TOKEN: ${{ github.token }}
