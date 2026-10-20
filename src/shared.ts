@@ -14,7 +14,8 @@ export interface Target extends Device { width: number; height: number; port: nu
 export interface Album { ClockId: number; ClockName: string; AlbumType: number }
 export interface Photo { PhotoId: number; Time: number; FileId: string; OriginalFileId?: string; MediaType?: 'photo' | 'video' }
 export interface Media { id: string; path: string; name: string; width: number; height: number; duration: number; size: number; kind: 'photo' | 'video'; preview: string; sourceKey?: string }
-export interface Edit { mediaId: string; x: number; y: number; width: number; height: number; rotation: number; start: number; end: number; coverTime: number }
+export type PhotoFit = 'crop' | 'width' | 'height';
+export interface Edit { fit?: PhotoFit; mediaId: string; x: number; y: number; width: number; height: number; rotation: number; start: number; end: number; coverTime: number }
 export interface Job { id: string; name: string; preview: string; state: string; progress: number; error?: string; photoId?: number; clockId: number; deviceIdentity?: string }
 export interface TimesFrameApi {
   discover(): Promise<Device[]>;

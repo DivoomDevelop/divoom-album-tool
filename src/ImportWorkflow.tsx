@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import type { Album, Edit, Media, Target } from './shared';
-import { defaultCrop, editFromSettings, mergeImported, settingsFromEdit, toggleImportSelection, validImportSelection } from './importing';
+import { defaultCrop, editFromSettings, mergeImported, settingsFromEdit, toggleImportSelection, validImportSelection, outputDimensions } from './importing';
 import { t, localizeError, errorText } from './i18n';
 
 export type WorkflowEditorProps={media:Media;target:Target;remaining:number;initialEdit?:Edit;onChange?:(edit:Edit)=>void;onCancel:()=>void;onSave:(edit:Edit)=>Promise<void>;saveLabel?:string;backLabel?:string;workHeader?:React.ReactNode;workFooter?:React.ReactNode;extraControls?:React.ReactNode};
@@ -10,6 +10,7 @@ const duration=(seconds:number)=>`${Math.floor(seconds/60).toString().padStart(2
 export function CropPreview({media,edit,target,onReady}:{media:Media;edit:Edit;target:Target;onReady?:()=>void}){
   const canvas=useRef<HTMLCanvasElement>(null),ready=useRef(onReady);ready.current=onReady;
   const [failed,setFailed]=useState(false);
+  const size=outputDimensions(edit,target),scale=Math.min(240/size.width,320/size.height);
   useEffect(()=>{
     let active=true;setFailed(false);const image=new Image();image.crossOrigin='anonymous';
     image.onload=()=>{
@@ -21,8 +22,8 @@ export function CropPreview({media,edit,target,onReady}:{media:Media;edit:Edit;t
     };
     image.onerror=()=>{if(active)setFailed(true);};image.src=media.path;
     return()=>{active=false;image.onload=null;image.onerror=null;image.src='';};
-  },[media.id,media.path,edit.x,edit.y,edit.width,edit.height,edit.rotation]);
-  return <div className="crop-preview">{failed?<span>{t('unavailable')}</span>:<canvas ref={canvas} width={240} height={Math.round(240*target.height/target.width)}/>}</div>;
+  },[media.id,media.path,edit.x,edit.y,edit.width,edit.height,edit.rotation,edit.fit,target.width,target.height]);
+  return <div className="crop-preview">{failed?<span>{t('unavailable')}</span>:<canvas ref={canvas} width={Math.max(1,Math.round(size.width*scale))} height={Math.max(1,Math.round(size.height*scale))}/>}</div>;
 }
 
 export function ImportWorkflow({target,album,onClose,onQueued,renderEditor}:{target:Target;album:Album;onClose:()=>void;onQueued:()=>void;renderEditor:(props:WorkflowEditorProps)=>React.ReactNode}){

@@ -92,7 +92,7 @@ async function processQueue(){
       const output=await convert(binary('ffmpeg'),binary('ffprobe'),media,edit,target,dataPath(`exports/${job.id}`),abort.signal,n=>{job.progress=n;broadcast();});
       job.state='正在上传';job.progress=0;broadcast();
       const now=Date.now();
-      const metadata={Command:'Photo/LocalAddToAlbum',DeviceId:target.DeviceId,UserId:1,ClockId:album.ClockId,ParentClockId:0,ParentItemId:'0',PhotoTitle:'',PhotoX:0,PhotoY:0,PhotoWidth:target.width,PhotoHeight:target.height,PhotoTotalCnt:1,PhotoIndex:0,SendTime:now,TakingTime:(await stat(media.path)).mtimeMs,PhotoFlag:now%2147483647,FileName:basename(output.file),PreviewFileName:output.cover?basename(output.cover):''};
+      const metadata={Command:'Photo/LocalAddToAlbum',DeviceId:target.DeviceId,UserId:1,ClockId:album.ClockId,ParentClockId:0,ParentItemId:'0',PhotoTitle:'',PhotoX:0,PhotoY:0,PhotoWidth:output.width,PhotoHeight:output.height,PhotoTotalCnt:1,PhotoIndex:0,SendTime:now,TakingTime:(await stat(media.path)).mtimeMs,PhotoFlag:now%2147483647,FileName:basename(output.file),PreviewFileName:output.cover?basename(output.cover):''};
       try{await lan.upload(target,metadata,[output.file,...(output.cover?[output.cover]:[])],abort.signal,n=>{job.progress=n;broadcast();});}
       finally{await cache.invalidateLists(target);}
       const receipt=dataPath(`exports/${job.id}/upload-receipt.json`);
