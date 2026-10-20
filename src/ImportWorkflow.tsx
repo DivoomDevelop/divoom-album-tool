@@ -10,7 +10,7 @@ const duration=(seconds:number)=>`${Math.floor(seconds/60).toString().padStart(2
 export function CropPreview({media,edit,target,onReady}:{media:Media;edit:Edit;target:Target;onReady?:()=>void}){
   const canvas=useRef<HTMLCanvasElement>(null),ready=useRef(onReady);ready.current=onReady;
   const [failed,setFailed]=useState(false);
-  const size=outputDimensions(edit,target),scale=Math.min(240/size.width,320/size.height);
+  const size=outputDimensions(edit,target,media.kind),scale=Math.min(240/size.width,320/size.height);
   useEffect(()=>{
     let active=true;setFailed(false);const image=new Image();image.crossOrigin='anonymous';
     image.onload=()=>{

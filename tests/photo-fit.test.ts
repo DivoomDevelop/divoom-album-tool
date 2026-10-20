@@ -9,24 +9,25 @@ import type {Media,Target,Edit,PhotoFit} from '../src/shared';
 const device:Target={DeviceId:123456789,Hardware:511,DeviceName:'Fixture',DevicePrivateIP:'127.0.0.1',width:800,height:1280,port:9000,apiPath:'/divoom_api',maxUploadBytes:104857600,maxVideoSeconds:600};
 const photo:Media={id:'photo',name:'wide.png',path:'wide.png',width:3264,height:2448,kind:'photo',duration:0,size:1,preview:''};
 test('whole-photo fits use the selected device bounds, preserve the full rotated source and survive batch templates',()=>{
- for(const target of [device,{...device,width:480,height:480,Hardware:530},{...device,width:1280,height:800,Hardware:512},{...device,width:479,height:481}])for(const fit of ['width','height'] as const)for(const rotation of [0,90,180,270]){
-  const first=editFromSettings(photo,target,{fit,rotation,zoom:3,centerX:.1,centerY:.9});validateEdit(photo,first,target);
+ for(const target of [device,{...device,width:480,height:480,Hardware:530},{...device,width:1280,height:800,Hardware:512},{...device,width:479,height:481}])for(const fit of ['crop','width','height'] as const)for(const rotation of [0,90,180,270]){
+  const first=editFromSettings(photo,target,{fit,rotation,zoom:1,centerX:.5,centerY:.5});validateEdit(photo,first,target);
   assert.deepEqual([first.x,first.y,first.width,first.height],[0,0,rotation%180?2448:3264,rotation%180?3264:2448]);
   const template=settingsFromEdit(photo,target,first);
   for(const source of [photo,{...photo,id:'portrait',width:1080,height:1920},{...photo,id:'panorama',width:10000,height:21}]){
-   const edit=editFromSettings(source,target,template),size=outputDimensions(edit,target);validateEdit(source,edit,target);assert.equal(edit.fit,fit);assert.equal(edit.rotation,rotation);assert.ok(size.width>0&&size.height>0&&size.width<=target.width&&size.height<=target.height);assert.ok(Math.abs(size.width/edit.width-size.height/edit.height)<=1/Math.min(edit.width,edit.height));assert.doesNotMatch(filters(edit,target),/crop=/);
+   const edit=editFromSettings(source,target,template),size=outputDimensions(edit,target);validateEdit(source,edit,target);assert.equal(edit.fit,fit);assert.equal(edit.rotation,rotation);assert.ok(size.width>0&&size.height>0&&size.width<=target.width&&size.height<=target.height);assert.ok(Math.abs(size.width/edit.width-size.height/edit.height)<=1/Math.min(edit.width,edit.height));assert.match(filters(edit,target,'photo'),/crop=.*:exact=1/);
   }
  }
- for(const fit of ['width','height'] as const){
+ for(const fit of ['crop','width','height'] as const){
   assert.deepEqual(outputDimensions(editFromSettings(photo,device,{fit,rotation:0,zoom:1,centerX:.5,centerY:.5}),device),{width:800,height:600});
   const tall={...photo,width:1080,height:1920};assert.deepEqual(outputDimensions(editFromSettings(tall,device,{fit,rotation:0,zoom:1,centerX:.5,centerY:.5}),device),{width:720,height:1280});
  }
 });
-test('fit modes cannot bypass video crop rules or submit a partial photo as a full-image fit',()=>{
+test('photo crops retain the original ratio and cannot bypass video rules',()=>{
  const edit=editFromSettings(photo,device,{fit:'width',rotation:0,zoom:1,centerX:.5,centerY:.5});
- for(const change of [{x:1},{width:photo.width-1},{fit:'stretch'}])assert.throws(()=>validateEdit(photo,{...edit,...change} as Edit,device));
+ for(const change of [{x:2},{width:photo.width-10},{fit:'stretch'}])assert.throws(()=>validateEdit(photo,{...edit,...change} as Edit,device));
  assert.throws(()=>validateEdit({...photo,kind:'video',duration:5},{...edit,end:1},device));
- assert.deepEqual(outputDimensions(editFromSettings(photo,device),device),{width:800,height:1280});
+ assert.deepEqual(outputDimensions(editFromSettings(photo,device),device),{width:800,height:600});
+ for(const fit of ['crop','width','height'] as const){const cropped=editFromSettings(photo,device,{fit,rotation:0,zoom:2,centerX:.4,centerY:.6});validateEdit(photo,cropped,device);assert.equal(cropped.width/photo.width,.5);assert.equal(cropped.height/photo.height,.5);assert.equal(settingsFromEdit(photo,device,cropped).zoom,2);}
 });
 test('real WebP fits preserve all four image edges, odd source dimensions, rotation and device limits',async()=>{
  const directory=await mkdtemp(join(tmpdir(),'divoom-fit-')),ffmpeg=resolve('vendor/ffmpeg.exe'),ffprobe=resolve('vendor/ffprobe.exe');

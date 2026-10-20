@@ -5,14 +5,14 @@ export const defaultCrop:CropSettings={rotation:0,zoom:1,centerX:.5,centerY:.5};
 export function editFromSettings(media:Media,target:Pick<Target,'width'|'height'>,settings:CropSettings=defaultCrop):Edit{
   const sw=settings.rotation%180?media.height:media.width,sh=settings.rotation%180?media.width:media.height;
   const fit=settings.fit??'crop';
-  if(fit!=='crop')return {mediaId:media.id,fit,rotation:settings.rotation,x:0,y:0,width:sw,height:sh,start:0,end:Math.min(media.duration,MAX_VIDEO_SECONDS),coverTime:0};
-  const width=Math.min(sw,sh*target.width/target.height)/settings.zoom,height=width*target.height/target.width;
-  return {mediaId:media.id,rotation:settings.rotation,x:Math.max(0,Math.min(sw-width,settings.centerX*sw-width/2)),y:Math.max(0,Math.min(sh-height,settings.centerY*sh-height/2)),width,height,start:0,end:Math.min(media.duration,MAX_VIDEO_SECONDS),coverTime:0};
+  const aspect=media.kind==='photo'?sw/sh:target.width/target.height;
+  const width=Math.min(sw,sh*aspect)/settings.zoom,height=width/aspect;
+  return {mediaId:media.id,...(media.kind==='photo'?{fit}:{}),rotation:settings.rotation,x:Math.max(0,Math.min(sw-width,settings.centerX*sw-width/2)),y:Math.max(0,Math.min(sh-height,settings.centerY*sh-height/2)),width,height,start:0,end:Math.min(media.duration,MAX_VIDEO_SECONDS),coverTime:0};
 }
 export function settingsFromEdit(media:Media,target:Pick<Target,'width'|'height'>,edit:Edit):CropSettings{
   const sw=edit.rotation%180?media.height:media.width,sh=edit.rotation%180?media.width:media.height;
-  if(edit.fit&&edit.fit!=='crop')return {fit:edit.fit,rotation:edit.rotation,zoom:1,centerX:.5,centerY:.5};
-  return {rotation:edit.rotation,zoom:Math.min(sw,sh*target.width/target.height)/edit.width,centerX:(edit.x+edit.width/2)/sw,centerY:(edit.y+edit.height/2)/sh};
+  const aspect=media.kind==='photo'?sw/sh:target.width/target.height;
+  return {...(media.kind==='photo'?{fit:edit.fit??'crop'}:{}),rotation:edit.rotation,zoom:Math.min(sw,sh*aspect)/edit.width,centerX:(edit.x+edit.width/2)/sw,centerY:(edit.y+edit.height/2)/sh};
 }
 export function validImportSelection(media:readonly Media[]):boolean{
   return media.length>0&&(!media.some(m=>m.kind==='video')||media.length===1);
@@ -28,10 +28,9 @@ export function mergeImported(current:readonly Media[],incoming:readonly Media[]
   return result;
 }
 
-/** Preserve the entire photo, bounded by both dimensions of the selected device. */
-export function outputDimensions(edit:Edit,target:Pick<Target,'width'|'height'>):{width:number;height:number}{
-  if(!edit.fit||edit.fit==='crop')return {width:target.width,height:target.height};
-  const preferred=edit.fit==='width'?target.width/edit.width:target.height/edit.height;
-  const scale=Math.min(preferred,target.width/edit.width,target.height/edit.height);
+/** Photos preserve the original aspect; video keeps the device canvas. */
+export function outputDimensions(edit:Edit,target:Pick<Target,'width'|'height'>,kind:Media['kind']='photo'):{width:number;height:number}{
+  if(kind==='video')return {width:target.width,height:target.height};
+  const scale=Math.min(target.width/edit.width,target.height/edit.height);
   return {width:Math.max(1,Math.floor(edit.width*scale+1e-7)),height:Math.max(1,Math.floor(edit.height*scale+1e-7))};
 }

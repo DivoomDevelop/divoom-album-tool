@@ -129,7 +129,7 @@ async function dispatch(method:string,args:any[]):Promise<unknown>{
     case 'thumbnail':{const [target,photo]=args as [Target,Photo];validateTarget(target);return thumbnail(target,photo);}
     case 'preview':{
       const [target,photo]=args as [Target,Photo];validateTarget(target);const file=await original(target,photo);
-      return {...await cache.json(target,'info:'+mediaKey(photo),()=>probe(binary('ffprobe'),file)),url:localUrl(file)};
+      return {...await cache.json(target,'info-v2:'+mediaKey(photo),()=>probe(binary('ffprobe'),file)),url:localUrl(file)};
     }
     case 'import':{
       const paths=args[0];if(!Array.isArray(paths)||paths.some(p=>typeof p!=='string'))throw new Error('导入文件列表无效');

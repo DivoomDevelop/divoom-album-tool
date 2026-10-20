@@ -1,5 +1,6 @@
 import { spawn } from 'node:child_process';
 import { outputDimensions } from '../src/importing';
+import { jpegOrientation } from './orientation';
 import { mkdir, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { MAX_VIDEO_SECONDS, MAX_UPLOAD_BYTES, isSupportedHardware, type Edit, type Media, type Target } from '../src/shared';
@@ -17,7 +18,8 @@ export async function probe(binary:string,file:string):Promise<{width:number;hei
   const duration=Number(video.duration??result.format.duration??0)||0;
   const photo=['.jpg','.jpeg','.png','.webp','.bmp','.heic','.avif'].includes(path.extname(file).toLowerCase());
   const rotation=Number(video.side_data_list?.find((d:any)=>d.rotation!==undefined)?.rotation??video.tags?.rotate??0);
-  const swap=Math.abs(rotation)%180===90;
+  const orientation=/\.jpe?g$/i.test(file)?await jpegOrientation(file):1;
+  const swap=orientation>=5||Math.abs(rotation)%180===90;
   return {width:swap?video.height:video.width,height:swap?video.width:video.height,duration:photo?0:duration,kind:photo?'photo':'video',size:(await stat(file)).size};
 }
 export function validateEdit(media:Media,edit:Edit,target:Pick<Target,'width'|'height'|'Hardware'|'maxVideoSeconds'>):void {
@@ -26,15 +28,16 @@ export function validateEdit(media:Media,edit:Edit,target:Pick<Target,'width'|'h
   const values=[edit.x,edit.y,edit.width,edit.height,edit.start,edit.end,edit.coverTime];
   if(values.some(n=>!Number.isFinite(n))||edit.x<0||edit.y<0||edit.width<2||edit.height<2||edit.x+edit.width>sw+1||edit.y+edit.height>sh+1)throw new Error('裁剪区域超出原图范围');
   const fit=edit.fit??'crop';
-  if(!['crop','width','height'].includes(fit)||(fit!=='crop'&&(media.kind!=='photo'||edit.x!==0||edit.y!==0||edit.width!==sw||edit.height!==sh)))throw new Error('裁剪比例与目标屏幕不一致');
-  if(fit==='crop'&&Math.abs(edit.width/edit.height-target.width/target.height)>0.02)throw new Error('裁剪比例与目标屏幕不一致');
+  if(!['crop','width','height'].includes(fit)||(fit!=='crop'&&media.kind!=='photo'))throw new Error('裁剪比例与目标屏幕不一致');
+  const aspect=media.kind==='photo'?sw/sh:target.width/target.height;
+  if(Math.abs(edit.width/edit.height-aspect)>0.0001)throw new Error('裁剪比例与目标屏幕不一致');
   if(media.kind==='video'&&(target.width%2||target.height%2))throw new Error('当前视频编码配置要求偶数屏幕尺寸');
   if(media.kind==='video'&&(edit.start<0||edit.end>media.duration+0.05||edit.end<=edit.start||edit.end-edit.start>Math.min(MAX_VIDEO_SECONDS,target.maxVideoSeconds)+0.001||edit.coverTime<edit.start||edit.coverTime>edit.end))throw new Error('视频片段必须在源视频范围内且不超过 10 分钟，预览图必须在片段内');
   if(media.kind==='video'&&!isSupportedHardware(target.Hardware))throw new Error('目前仅支持 TimsFrame（510/511/512）和 AstroToo（530）');
 }
-export function filters(edit:Edit,target:Pick<Target,'width'|'height'>):string {
+export function filters(edit:Edit,target:Pick<Target,'width'|'height'>,kind:Media['kind']='video'):string {
   const rotate=edit.rotation===90?['transpose=1']:edit.rotation===180?['hflip','vflip']:edit.rotation===270?['transpose=2']:[];
-  if(edit.fit&&edit.fit!=='crop'){const size=outputDimensions(edit,target);return [...rotate,`scale=${size.width}:${size.height}:flags=lanczos`,'setsar=1'].join(',');}
+  if(kind==='photo'){const size=outputDimensions(edit,target,kind);return [...rotate,`crop=${edit.width}:${edit.height}:${edit.x}:${edit.y}:exact=1`,`scale=${size.width}:${size.height}:flags=lanczos`,'setsar=1'].join(',');}
   return [...rotate,`crop=${Math.floor(edit.width/2)*2}:${Math.floor(edit.height/2)*2}:${Math.floor(edit.x/2)*2}:${Math.floor(edit.y/2)*2}`,`scale=${target.width}:${target.height}:flags=lanczos`,'setsar=1'].join(',');
 }
 export function videoEncoding(target:Pick<Target,'Hardware'|'maxUploadBytes'>,duration:number):{fps:number;args:string[]} {
@@ -55,13 +58,13 @@ export async function convert(ffmpeg:string,ffprobe:string,media:Media,edit:Edit
   const common=['-y','-hide_banner','-loglevel','error'];
   // Match the app's WebP photo path; device JPEG thumbnail conversion can mix
   // RGB565 output with the BGRA input expected by WebPEncodeBGRA.
-  if(media.kind==='photo')await run(ffmpeg,[...common,'-i',media.path,'-vf',filters(edit,target),'-frames:v','1','-c:v','libwebp','-quality','90','-preset','picture',file],signal);
+  if(media.kind==='photo')await run(ffmpeg,[...common,'-i',media.path,'-vf',filters(edit,target,'photo'),'-frames:v','1','-c:v','libwebp','-quality','90','-preset','picture',file],signal);
   else{
     const duration=edit.end-edit.start,encoding=videoEncoding(target,duration);
     const vf=target.Hardware===530?filters(edit,target):filters(edit,target).replace(':flags=lanczos',':flags=lanczos:out_color_matrix=bt709:out_range=tv');
     await run(ffmpeg,[...common,'-ss',String(edit.start),'-i',media.path,'-t',String(duration),'-map','0:v:0','-vf',vf,...encoding.args,'-frames:v',String(Math.max(1,Math.floor(duration*encoding.fps))),'-movflags','+faststart','-progress','pipe:1',file],signal,text=>{const match=text.match(/out_time_us=(\d+)/);if(match)progress(Math.min(99,Number(match[1])/1000000/duration*100));});
   }
-  const size=outputDimensions(edit,target),output=await probe(ffprobe,file);if(output.width!==size.width||output.height!==size.height)throw new Error('输出尺寸校验失败');
+  const size=outputDimensions(edit,target,media.kind),output=await probe(ffprobe,file);if(output.width!==size.width||output.height!==size.height)throw new Error('输出尺寸校验失败');
   if(media.kind==='photo')return {file,width:output.width,height:output.height};
   const cover=path.join(directory,`preview-${stem}.webp`);
   await run(ffmpeg,[...common,'-ss',String(Math.min(edit.coverTime-edit.start,Math.max(0,output.duration-0.04))),'-i',file,'-frames:v','1','-c:v','libwebp','-quality','85',cover],signal);

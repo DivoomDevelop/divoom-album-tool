@@ -31,7 +31,7 @@ test('first-photo crop adapts to portrait, landscape and device aspect ratio wit
   for(const screen of [target,{...target,width:640,height:360}])for(const rotation of [0,90,180,270]){
     const settings={rotation,zoom:1.8,centerX:.4,centerY:.6},first=editFromSettings(photo,screen,settings),template=settingsFromEdit(photo,screen,first);
     const applied=editFromSettings(other,screen,template);validateEdit(photo,first,screen);validateEdit(other,applied,screen);
-    assert.equal(applied.mediaId,'p2');assert.equal(applied.rotation,rotation);assert.ok(Math.abs(applied.width/applied.height-screen.width/screen.height)<1e-10);
+    assert.equal(applied.mediaId,'p2');assert.equal(applied.rotation,rotation);assert.ok(Math.abs(applied.width/applied.height-(rotation%180?other.height/other.width:other.width/other.height))<1e-10);
     const actual=settingsFromEdit(other,screen,applied);assert.ok(Math.abs(actual.zoom-settings.zoom)<1e-10);assert.ok(applied.x>=0&&applied.y>=0);
   }
 });

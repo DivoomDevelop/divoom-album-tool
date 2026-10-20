@@ -3412,7 +3412,7 @@ dependencies = [
 
 [[package]]
 name = "timesframe"
-version = "0.3.3"
+version = "0.3.4"
 dependencies = [
  "serde",
  "serde_json",
