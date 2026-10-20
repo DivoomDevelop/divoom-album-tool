@@ -22,10 +22,10 @@ test('whole-photo fits use the selected device bounds, preserve the full rotated
   const tall={...photo,width:1080,height:1920};assert.deepEqual(outputDimensions(editFromSettings(tall,device,{fit,rotation:0,zoom:1,centerX:.5,centerY:.5}),device),{width:720,height:1280});
  }
 });
-test('photo crops retain the original ratio and cannot bypass video rules',()=>{
+test('photo and video crops retain the original ratio with a shared fit selection',()=>{
  const edit=editFromSettings(photo,device,{fit:'width',rotation:0,zoom:1,centerX:.5,centerY:.5});
  for(const change of [{x:2},{width:photo.width-10},{fit:'stretch'}])assert.throws(()=>validateEdit(photo,{...edit,...change} as Edit,device));
- assert.throws(()=>validateEdit({...photo,kind:'video',duration:5},{...edit,end:1},device));
+ assert.doesNotThrow(()=>validateEdit({...photo,kind:'video',duration:5},{...edit,end:1},device));
  assert.deepEqual(outputDimensions(editFromSettings(photo,device),device),{width:800,height:600});
  for(const fit of ['crop','width','height'] as const){const cropped=editFromSettings(photo,device,{fit,rotation:0,zoom:2,centerX:.4,centerY:.6});validateEdit(photo,cropped,device);assert.equal(cropped.width/photo.width,.5);assert.equal(cropped.height/photo.height,.5);assert.equal(settingsFromEdit(photo,device,cropped).zoom,2);}
 });

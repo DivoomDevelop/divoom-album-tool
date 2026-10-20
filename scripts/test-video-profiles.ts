@@ -4,7 +4,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { resolve, join } from 'node:path';
 import { convert, probe, run, validateEdit } from '../backend/media';
-import { editFromSettings } from '../src/importing';
+import { editFromSettings, outputDimensions } from '../src/importing';
 import { MAX_VIDEO_SECONDS, type Media, type Target } from '../src/shared';
 
 async function main(){
@@ -25,13 +25,13 @@ async function main(){
     const output=await convert(ffmpeg,ffprobe,media,edit,target,join(directory,String(Hardware)),new AbortController().signal,()=>{});
     assert.ok(output.cover);const metadata=await inspect(output.file),video=metadata.streams.find((s:any)=>s.codec_type==='video'),audio=metadata.streams.find((s:any)=>s.codec_type==='audio');
     assert.equal(video.codec_name,Hardware===530?'h264':'hevc');assert.equal(video.pix_fmt,'yuv420p');
-    assert.equal(video.width,width);assert.equal(video.height,height);assert.ok(Math.abs(Number(video.duration)-2)<.06);
+    const size=outputDimensions(edit,target,'video');assert.equal(video.width,size.width);assert.equal(video.height,size.height);assert.ok(Math.abs(Number(video.duration)-2)<.06);
     if(Hardware!==530){
       assert.equal(video.profile,'Main');assert.equal(video.codec_tag_string,'hvc1');assert.equal(video.level,120);assert.equal(video.r_frame_rate,'30/1');
       for(const key of ['color_space','color_transfer','color_primaries'])assert.equal(video[key],'bt709');assert.equal(video.color_range,'tv');
       if(Hardware===511)assert.equal(audio,undefined);else{assert.equal(audio.codec_name,'aac');assert.equal(audio.profile,'LC');assert.equal(audio.sample_rate,'44100');assert.equal(audio.channels,2);}
     }else{assert.match(video.profile,/Baseline/);assert.equal(video.level,21);assert.equal(audio,undefined);}
-    const cover=await probe(ffprobe,output.cover!);assert.equal(cover.width,width);assert.equal(cover.height,height);assert.ok(cover.size>0);
+    const cover=await probe(ffprobe,output.cover!);assert.equal(cover.width,size.width);assert.equal(cover.height,size.height);assert.ok(cover.size>0);
     await run(ffmpeg,['-v','error','-xerror','-i',output.file,'-f','null','-']);
     reports.push({Hardware,output,video,audio,cover,decode:'PASS'});
   }

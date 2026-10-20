@@ -5,7 +5,7 @@ import {spawn} from 'node:child_process';
 import {mkdir,writeFile,readFile} from 'node:fs/promises';
 import {resolve,join} from 'node:path';
 import assert from 'node:assert/strict';
-import {run} from '../backend/media';
+import {run,probe} from '../backend/media';
 import {languages,translate} from '../src/i18n';
 import type {Job} from '../src/shared';
 const {chromium}=createRequire(resolve('package.json'))('C:/Users/Administrator/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/playwright');
@@ -15,7 +15,7 @@ async function main(){
  await run(ffmpeg,['-v','error','-f','lavfi','-i','testsrc2=s=1440x1080','-frames:v','1',paths[1]]);
  const jpeg=await readFile(paths[1]);await writeFile(paths[1],Buffer.concat([jpeg.subarray(0,2),Buffer.from('ffe1002245786966000049492a0008000000010012010300010000000600000000000000','hex'),jpeg.subarray(2)]));
  if(process.env.DIVOOM_TEST_PHOTOS){const originals=process.env.DIVOOM_TEST_PHOTOS.split(';');assert.equal(originals.length,2);paths.splice(0,2,...originals);}
- await run(ffmpeg,['-v','error','-f','lavfi','-i','testsrc2=s=480x480:r=30','-t','1','-c:v','libx264','-pix_fmt','yuv420p',paths[2]]);
+ await run(ffmpeg,['-v','error','-f','lavfi','-i','testsrc2=s=360x640:r=30','-t','2','-c:v','libx264','-pix_fmt','yuv420p',paths[2]]);
  let hardware=511;const uploads:any[]=[],mediaFiles=new Map<string,Buffer>(),records=new Map<number,any[]>();const errors:string[]=[],checks:string[]=[];
  const server=createServer(async(req,res)=>{try{
   if(req.method==='GET'||req.method==='HEAD'){const data=mediaFiles.get(req.url!);if(!data){res.writeHead(404).end();return;}res.writeHead(200,{'Content-Length':data.length,'Content-Type':req.url!.endsWith('.webp')?'image/webp':'video/mp4'});res.end(req.method==='HEAD'?undefined:data);return;}
@@ -24,7 +24,8 @@ async function main(){
    assert.equal(Number(req.headers['content-length']),body.length);const parts:{name:string;data:Buffer}[]=[];let cursor=0;const boundary=String(req.headers['content-type']).split('boundary=')[1];
    while(cursor<body.length){if(body.subarray(cursor,cursor+boundary.length+4).toString()==='--'+boundary+'--')break;const end=body.indexOf('\r\n\r\n',cursor);assert.ok(end>=0);const head=body.subarray(cursor,end).toString(),length=Number(head.match(/Content-Length: (\d+)/i)![1]),name=head.match(/name="([^"]+)"/)![1];parts.push({name,data:body.subarray(end+4,end+4+length)});cursor=end+4+length+2;}
    const metadata=JSON.parse(parts[0].data.toString());assert.equal(metadata.PhotoTitle,'');const file=parts.find(p=>p.name===metadata.FileName);assert.ok(file);mediaFiles.set('/userdata/app_pic/'+metadata.FileName,file.data);uploads.push({hardware,metadata});await writeFile(join(directory,metadata.FileName),file.data);
-   const list=records.get(hardware)??[];list.unshift({PhotoId:uploads.length,Time:Date.now()/1000,FileId:'/userdata/app_pic/'+metadata.FileName,OriginalFileId:'/userdata/app_pic/'+metadata.FileName,MediaType:'photo'});records.set(hardware,list);
+   if(metadata.PreviewFileName){const cover=parts.find(p=>p.name===metadata.PreviewFileName);assert.ok(cover);mediaFiles.set('/userdata/app_pic/'+metadata.PreviewFileName,cover.data);await writeFile(join(directory,metadata.PreviewFileName),cover.data);}
+   const list=records.get(hardware)??[];list.unshift({PhotoId:uploads.length,Time:Date.now()/1000,FileId:'/userdata/app_pic/'+(metadata.PreviewFileName||metadata.FileName),OriginalFileId:'/userdata/app_pic/'+metadata.FileName,MediaType:metadata.PreviewFileName?'video':'photo'});records.set(hardware,list);
   }else{const data=JSON.parse(body.toString());switch(data.Command){
    case 'Device/GetHardwareVersion':case 'Device/GetLanCapabilities':result={...result,Hardware:hardware,DeviceId:770000000+hardware,CanvasWidth:hardware===530?480:800,CanvasHeight:hardware===530?480:1280,SupportsPhotoLibrary:true,PhotoUploadMaxBytes:104857600,PhotoVideoMaxSeconds:600};break;
    case 'Photo/GetLocalAlbumList':result.AlbumList=[{ClockId:100000,ClockName:'All',AlbumType:1},{ClockId:100001,ClockName:'Fit test',AlbumType:0}];break;
@@ -53,8 +54,25 @@ async function main(){
   await page.getByRole('button',{name:translate('zh-CN','uploadCount',{count:2}),exact:true}).click();let jobs:Job[]=[];for(let i=0;i<100;i++){jobs=await rpc('jobs');if(jobs.length===2&&jobs.every(j=>['已完成','需检查'].includes(j.state)))break;await page.waitForTimeout(200);}assert.ok(jobs.length===2&&jobs.every(j=>j.state==='已完成'),JSON.stringify(jobs));assert.deepEqual(uploads.map(x=>[x.metadata.PhotoWidth,x.metadata.PhotoHeight]),[[800,600],[800,1066]]);const submitted=await page.evaluate(()=>(window as any).__submitted);assert.equal(submitted[0][2][0].fit,'width');assert.equal(submitted[0][2][1].fit,'height');checks.push('first-photo fit template, per-photo height override, actual worker conversions and matching multipart dimensions');
   await page.locator('.job-name small').filter({hasText:'已完成'}).nth(1).waitFor();await page.locator('.toolbar-right button:not([disabled])').waitFor();
   hardware=530;await connect();await choose([paths[0]]);await page.locator('[data-fit=width]').click();await page.getByTestId('output-size').getByText('实际导出: 480 × 360',{exact:true}).waitFor();await page.screenshot({path:join(directory,'astrotoo-fit-480x360.png'),fullPage:true});await page.locator('[data-fit=crop]').click();await page.getByTestId('output-size').getByText('实际导出: 480 × 360',{exact:true}).waitFor();checks.push('switch to actual 480x480 device bounds, original photo proportions in all modes');
-  await page.getByRole('button',{name:'‹ 返回选择',exact:true}).click();await page.getByRole('button',{name:'‹ 返回相簿',exact:true}).click();await choose([paths[2]]);assert.equal(await page.locator('.photo-framing').count(),0);checks.push('video retains crop-only workflow');assert.deepEqual(errors,[]);
-  await writeFile(join(directory,'report.json'),JSON.stringify({result:'PASS',runtime:'Tauri/WebView2 + actual worker + loopback fixture',checks,uploads,submitted,errors},null,2));console.log(JSON.stringify({result:'PASS',directory,checks}));
+  await page.getByRole('button',{name:'‹ 返回选择',exact:true}).click();await page.getByRole('button',{name:'‹ 返回相簿',exact:true}).click();for(const model of [530,511]){
+   if(hardware!==model){hardware=model;await connect();}
+   await choose([paths[2]]);assert.equal(await page.locator('[data-fit]').count(),3);const expected=model===530?'270 × 480':'720 × 1280';
+   await page.getByTestId('output-size').getByText('实际导出: '+expected,{exact:true}).waitFor();
+   for(const {locale} of languages){await page.getByTestId('language-select').selectOption(locale,{force:true});await page.locator('.photo-framing label').getByText(translate(locale,'videoFraming'),{exact:true}).waitFor();await layout('video '+locale);}
+   await page.getByTestId('language-select').selectOption('zh-CN',{force:true});
+   await page.locator('[data-fit=width]').click();const wide=await viewSize();await page.locator('[data-fit=height]').click();assert.notDeepEqual(await viewSize(),wide);
+   await page.getByRole('button',{name:'↻ 旋转 90°',exact:true}).click();await page.getByTestId('output-size').getByText('实际导出: '+(model===530?'480 × 270':'800 × 450'),{exact:true}).waitFor();await page.getByRole('button',{name:'重置',exact:true}).click();
+   await page.getByRole('spinbutton',{name:translate('zh-CN','start'),exact:true}).fill('0.2');await page.getByRole('spinbutton',{name:translate('zh-CN','end'),exact:true}).fill('0.8');
+   await page.getByRole('slider',{name:translate('zh-CN','seek'),exact:true}).press('Home');for(let step=0;step<10;step++)await page.getByRole('slider',{name:translate('zh-CN','seek'),exact:true}).press('ArrowRight');
+   await page.waitForFunction(()=>{const v=document.querySelector('video');return v&&v.readyState>=2&&!v.seeking;});await page.getByRole('button',{name:translate('zh-CN','chooseFrame'),exact:true}).click();
+   const frames=await page.locator('.preview-pair canvas').evaluateAll((items:any[])=>items.map(c=>[c.width,c.height]));assert.deepEqual(frames[0],frames[1]);await page.screenshot({path:join(directory,`video-fit-${model}.png`),fullPage:true});
+   const count=uploads.length+1;await page.getByRole('button',{name:translate('zh-CN','save'),exact:true}).click();let videoJobs:Job[]=[];for(let i=0;i<100;i++){videoJobs=await rpc('jobs');if(videoJobs.length===count&&videoJobs.every(j=>['已完成','需检查'].includes(j.state)))break;await page.waitForTimeout(200);}assert.ok(videoJobs.length===count&&videoJobs.every(j=>j.state==='已完成'),JSON.stringify(videoJobs));
+   const metadata=uploads.at(-1).metadata;assert.deepEqual([metadata.PhotoWidth,metadata.PhotoHeight],model===530?[270,480]:[720,1280]);for(const name of [metadata.FileName,metadata.PreviewFileName]){assert.ok(name);const info=await probe(resolve('vendor/ffprobe.exe'),join(directory,name));assert.deepEqual([info.width,info.height],[metadata.PhotoWidth,metadata.PhotoHeight]);}
+   await page.locator('.job-name small').filter({hasText:'已完成'}).nth(count-1).waitFor();await page.locator('.toolbar-right button:not([disabled])').waitFor();
+  }
+  await page.locator('.media-tile:has(.video-badge) .tile-image img').first().waitFor();const videoFits:string[]=await page.locator('.media-tile:has(.video-badge) .tile-image img').evaluateAll((items:Element[])=>items.map(image=>getComputedStyle(image).objectFit));assert.ok(videoFits.length>0&&videoFits.every(fit=>fit==='contain'));
+  checks.push('video original aspect, three fit views, 19 languages, rotate/reset, trim and cover selection; H.264 270x480 and H.265 720x1280 with matching WebP covers and multipart dimensions');assert.deepEqual(errors,[]);
+  await writeFile(join(directory,'report.json'),JSON.stringify({result:'PASS',runtime:'Tauri/WebView2 + actual worker + loopback fixture',checks,uploads,submitted:await page.evaluate(()=>(window as any).__submitted),errors},null,2));console.log(JSON.stringify({result:'PASS',directory,checks}));
  }finally{if(browser)await browser.close();child.kill();server.closeAllConnections();server.close();}
 }
 void main().catch(error=>{console.error(error);process.exitCode=1;});

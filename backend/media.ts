@@ -28,17 +28,16 @@ export function validateEdit(media:Media,edit:Edit,target:Pick<Target,'width'|'h
   const values=[edit.x,edit.y,edit.width,edit.height,edit.start,edit.end,edit.coverTime];
   if(values.some(n=>!Number.isFinite(n))||edit.x<0||edit.y<0||edit.width<2||edit.height<2||edit.x+edit.width>sw+1||edit.y+edit.height>sh+1)throw new Error('裁剪区域超出原图范围');
   const fit=edit.fit??'crop';
-  if(!['crop','width','height'].includes(fit)||(fit!=='crop'&&media.kind!=='photo'))throw new Error('裁剪比例与目标屏幕不一致');
-  const aspect=media.kind==='photo'?sw/sh:target.width/target.height;
+  if(!['crop','width','height'].includes(fit))throw new Error('裁剪比例与目标屏幕不一致');
+  const aspect=sw/sh;
   if(Math.abs(edit.width/edit.height-aspect)>0.0001)throw new Error('裁剪比例与目标屏幕不一致');
-  if(media.kind==='video'&&(target.width%2||target.height%2))throw new Error('当前视频编码配置要求偶数屏幕尺寸');
   if(media.kind==='video'&&(edit.start<0||edit.end>media.duration+0.05||edit.end<=edit.start||edit.end-edit.start>Math.min(MAX_VIDEO_SECONDS,target.maxVideoSeconds)+0.001||edit.coverTime<edit.start||edit.coverTime>edit.end))throw new Error('视频片段必须在源视频范围内且不超过 10 分钟，预览图必须在片段内');
   if(media.kind==='video'&&!isSupportedHardware(target.Hardware))throw new Error('目前仅支持 TimsFrame（510/511/512）和 AstroToo（530）');
 }
 export function filters(edit:Edit,target:Pick<Target,'width'|'height'>,kind:Media['kind']='video'):string {
   const rotate=edit.rotation===90?['transpose=1']:edit.rotation===180?['hflip','vflip']:edit.rotation===270?['transpose=2']:[];
-  if(kind==='photo'){const size=outputDimensions(edit,target,kind);return [...rotate,`crop=${edit.width}:${edit.height}:${edit.x}:${edit.y}:exact=1`,`scale=${size.width}:${size.height}:flags=lanczos`,'setsar=1'].join(',');}
-  return [...rotate,`crop=${Math.floor(edit.width/2)*2}:${Math.floor(edit.height/2)*2}:${Math.floor(edit.x/2)*2}:${Math.floor(edit.y/2)*2}`,`scale=${target.width}:${target.height}:flags=lanczos`,'setsar=1'].join(',');
+  const size=outputDimensions(edit,target,kind);
+  return [...rotate,`crop=${edit.width}:${edit.height}:${edit.x}:${edit.y}:exact=1`,`scale=${size.width}:${size.height}:flags=lanczos`,'setsar=1'].join(',');
 }
 export function videoEncoding(target:Pick<Target,'Hardware'|'maxUploadBytes'>,duration:number):{fps:number;args:string[]} {
   if(target.Hardware===530)return {fps:30000/1001,args:['-an','-c:v','libx264','-profile:v','baseline','-level:v','2.1','-pix_fmt','yuv420p','-r','30000/1001','-b:v','1000k','-maxrate','1500k','-bufsize','3000k','-g','60']};
@@ -68,6 +67,6 @@ export async function convert(ffmpeg:string,ffprobe:string,media:Media,edit:Edit
   if(media.kind==='photo')return {file,width:output.width,height:output.height};
   const cover=path.join(directory,`preview-${stem}.webp`);
   await run(ffmpeg,[...common,'-ss',String(Math.min(edit.coverTime-edit.start,Math.max(0,output.duration-0.04))),'-i',file,'-frames:v','1','-c:v','libwebp','-quality','85',cover],signal);
-  const coverInfo=await probe(ffprobe,cover);if(coverInfo.width!==target.width||coverInfo.height!==target.height||!coverInfo.size)throw new Error('视频预览图校验失败');
+  const coverInfo=await probe(ffprobe,cover);if(coverInfo.width!==size.width||coverInfo.height!==size.height||!coverInfo.size)throw new Error('视频预览图校验失败');
   return {file,cover,width:output.width,height:output.height};
 }

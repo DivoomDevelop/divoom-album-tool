@@ -9,12 +9,12 @@ import { filters, validateEdit, videoEncoding } from '../backend/media';
 import { MAX_UPLOAD_BYTES, deviceTitle, type Edit, type Media, type Target } from '../src/shared';
 const target:Target={DeviceId:123,Hardware:530,DeviceName:'Test',DevicePrivateIP:'127.0.0.1',width:480,height:480,port:9000,apiPath:'/divoom_api',maxUploadBytes:MAX_UPLOAD_BYTES,maxVideoSeconds:1800};
 const media:Media={id:'1',name:'video.mp4',path:'video.mp4',width:1920,height:1080,duration:1801,size:1,kind:'video',preview:''};
-const edit:Edit={mediaId:'1',x:420,y:0,width:1080,height:1080,rotation:0,start:0,end:600,coverTime:0};
+const edit:Edit={mediaId:'1',x:0,y:0,width:1920,height:1080,rotation:0,start:0,end:600,coverTime:0};
 test('device-specific title follows hardware selection',()=>{for(const h of [510,511,512])assert.equal(deviceTitle(h),'TimsFrame');assert.equal(deviceTitle(530),'AstroToo');assert.equal(deviceTitle(),'Divoom 相簿');assert.equal(deviceTitle(999),'Divoom 相簿');});
 test('10-minute boundary and invalid trim/crop/cover are enforced',()=>{
   assert.doesNotThrow(()=>validateEdit(media,edit,target));
   for(const change of [{end:600.1},{start:-1},{end:0},{coverTime:600.1},{width:2000},{x:NaN},{rotation:45}])assert.throws(()=>validateEdit(media,{...edit,...change},target));
-  assert.match(filters(edit,target),/scale=480:480/);
+  assert.match(filters(edit,target),/scale=480:270/);
   assert.match(filters({...edit,rotation:90},target),/^transpose=1/);
 });
 test('all supported models enforce 600 seconds even with stale higher device capabilities',()=>{
