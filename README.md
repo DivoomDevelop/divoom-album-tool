@@ -2,6 +2,17 @@
 
 使用 **Tauri 2 + React + TypeScript**。媒体服务作为随应用打包的独立进程运行，内置 Node.js、FFmpeg 和 ffprobe，目标电脑无需安装这些依赖。
 
+## 诊断日志
+
+v0.3.7 起，Windows 日志优先保存在 `DivoomAlbum.exe` 同级的 `logs/` 文件夹。安装目录无法写入时自动使用 `%APPDATA%\com.divoom.timesframe\logs\`，日志首条记录包含实际目录。缓存与最近设备信息仍按用户保存在原来的 AppData 目录。
+
+- `diagnostics.jsonl`：应用版本、进程/会话与请求编号、连接硬件/能力查询、完整控制命令和 JSON 响应、HTTP 状态与耗时、相簿/照片数量、缓存命中/失效、转换/上传及异常堆栈。`jobs` 高频轮询不重复记录。
+- `worker.log`：原生启动位置、日志目录回退原因及媒体进程标准错误。
+- 重启后追加保留；诊断日志单文件 5 MiB，保留 3 份轮转备份。标准错误日志在下次启动时超过 5 MiB 也进行轮转。
+- 连接令牌、密码、鉴权字段、图片/视频内容和本地媒体访问令牌不写入。单条异常超大响应会标记截断。
+
+出现“已连接但相簿为空”时，可直接点击“刷新相簿”重新请求设备，即使当前没有相簿也可用。复现一次后，将整个 `logs` 文件夹压缩发回分析；`cache.json.hit` 且 `count:0` 表示命中空缓存，`command.response` 可核对设备实际返回，接口异常在 `command.error`/`rpc.error` 中。
+
 ## 使用
 
 1. 将 PC 和设备连接到同一个局域网。点击“刷新设备”选择设备，或通过“手动 IP”连接。
@@ -78,7 +89,7 @@ npx tsx scripts/test-video-profiles.ts
 
 `test-device-cache.ts` 默认只读验证用户指定的 `192.168.13.142`，可通过 `DIVOOM_TEST_IP` 修改。第二阶段重启媒体进程并禁止 HTTP/fetch，验证磁盘缓存复用。`ui-languages.ts` 需先以 `TIMESFRAME_UI_TEST=1` 启动 debug Tauri；检查全部语言、真机缩略图和裁剪布局。该模式使用独立 WebView/媒体服务测试数据，release 不启用调试端口。
 
-最终平台发行包由 GitHub Actions 在 Windows x64、macOS Apple Silicon 和 macOS Intel 原生环境构建，运行媒体转换与打包后服务验证。macOS 要求 13.5 或更新版本，安装包使用 ad-hoc 签名，尚未通过 Apple 公证。首次打开可能需要在系统“隐私与安全性”中允许打开。x64 仿真曾在原有 MQTT 遗嘱主题代码中发生指针异常，因此使用项目规定的 x86 仿真进行验收；没有修改或跳过该 MQTT 模块。
+本次 v0.3.7 仅构建 Windows x64，运行媒体转换、诊断日志与打包后服务验证；v0.3.6 的 macOS Apple Silicon/Intel 包已分别通过原生构建与媒体测试。macOS 要求 13.5 或更新版本，安装包使用 ad-hoc 签名，尚未通过 Apple 公证。首次打开可能需要在系统“隐私与安全性”中允许打开。x64 仿真曾在原有 MQTT 遗嘱主题代码中发生指针异常，因此使用项目规定的 x86 仿真进行验收；没有修改或跳过该 MQTT 模块。
 
 ## 设计资源
 

@@ -1,3 +1,4 @@
+import appPackage from '../package.json';
 import {createServer} from 'node:http';
 import {spawn,execFileSync} from 'node:child_process';
 import {createInterface} from 'node:readline';
@@ -7,7 +8,7 @@ import assert from 'node:assert/strict';
 import {editFromSettings} from '../src/importing';
 async function main(){
  const output=resolve('artifacts/packaged-upload-'+Date.now());await mkdir(output,{recursive:true});
- const pack=resolve(process.env.DIVOOM_PACK_DIRECTORY??'release/DivoomAlbum-win-x64-v0.3.6'),ffmpeg=join(process.env.DIVOOM_PACK_RESOURCES??pack,'bin','ffmpeg'+(process.platform==='win32'?'.exe':''));
+ const pack=resolve(process.env.DIVOOM_PACK_DIRECTORY??`release/DivoomAlbum-win-x64-v${appPackage.version}`),ffmpeg=join(process.env.DIVOOM_PACK_RESOURCES??pack,'bin','ffmpeg'+(process.platform==='win32'?'.exe':''));
  const image=join(output,'red.JPG'),video=join(output,'blue.mp4');
  execFileSync(ffmpeg,['-v','error','-f','lavfi','-i','color=c=red:s=640x480','-frames:v','1',image],{windowsHide:true});
  execFileSync(ffmpeg,['-v','error','-f','lavfi','-i','color=c=blue:s=360x640:r=30','-t','1','-c:v','libx264','-pix_fmt','yuv420p',video],{windowsHide:true});
@@ -29,6 +30,7 @@ async function main(){
  const target={DeviceId:123456789,Hardware:511,DeviceName:'Fixture',DevicePrivateIP:'127.0.0.1',width:800,height:1280,port:9000,apiPath:'/divoom_api',maxUploadBytes:104857600,maxVideoSeconds:600},album={ClockId:100001,ClockName:'Test',AlbumType:0};
  for(const source of [image,video]){const {media}=await rpc('import',[source]);assert.equal(media.length,1);await rpc('enqueueBatch',target,album,[editFromSettings(media[0],target,{fit:source===image?'width':'crop',rotation:0,zoom:1,centerX:.5,centerY:.5})],'fixture-'+uploads.length);let jobs:any[]=[];for(let i=0;i<100;i++){jobs=await rpc('jobs');if(jobs.every(x=>['已完成','需检查'].includes(x.state)))break;await new Promise(r=>setTimeout(r,100));}assert.ok(jobs.every(x=>x.state==='已完成'),JSON.stringify(jobs));}
  assert.equal(uploads.length,2);for(const metadata of uploads)assert.equal(metadata.PhotoTitle,'');assert.deepEqual(uploads.map(m=>[m.PhotoWidth,m.PhotoHeight]),[[800,1066],[720,1280]]);
+ const log=await readFile(join(output,'data/logs/diagnostics.jsonl'),'utf8'),events=log.trim().split('\n').map(line=>JSON.parse(line));assert.ok(events.some(x=>x.event==='worker.start'));assert.ok(events.some(x=>x.event==='command.response'&&x.details.Command==='Photo/GetLocalAlbumList'));assert.ok(events.some(x=>x.event==='job.completed'));assert.ok(!log.includes('data:image/'));
  await writeFile(join(output,'report.json'),JSON.stringify({result:'PASS',checks:['packaged executable worker','EXIF portrait WebP 800x1066, matching multipart dimensions','HEVC MP4 and WebP preview upload preserve source aspect at 720x1280','photo and video PhotoTitle empty on actual HTTP wire','target and all-album confirmation'],uploads},null,2));console.log('PASS: '+output);
  }finally{child.stdin.end();await new Promise<void>(r=>child.once('exit',()=>r()));server.close();assert.equal(stderr,'');}
 }

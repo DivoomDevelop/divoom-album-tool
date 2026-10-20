@@ -1,4 +1,5 @@
 import http from 'node:http';
+import {diagnostic,deviceDetails} from './diagnostics';
 import { isIPv4 } from 'node:net';
 import { createReadStream } from 'node:fs';
 import { stat } from 'node:fs/promises';
@@ -36,30 +37,41 @@ export function endpoint(device: Partial<Device> & {DevicePrivateIP:string}): Pi
   return [90,92,400].includes(device.Hardware ?? 0) ? {port:80,apiPath:'/post'} : {port:9000,apiPath:'/divoom_api'};
 }
 export function request(target: Pick<Target,'DevicePrivateIP'|'port'>, path:string, method:string, body?:Buffer, signal?:AbortSignal, timeout=20000):Promise<{data:Buffer; headers:http.IncomingHttpHeaders}> {
-  return withDeviceConnection(target,()=>new Promise((resolve,reject)=>{
+  const requestId=randomUUID(),queued=Date.now();
+  diagnostic('http.queued',{requestId,target:deviceDetails(target),path,method,timeout,bodyBytes:body?.length??0});
+  return withDeviceConnection(target,()=>new Promise<{data:Buffer;headers:http.IncomingHttpHeaders}>((resolve,reject)=>{
+    diagnostic('http.start',{requestId,queueMs:Date.now()-queued});
     const req=http.request({host:target.DevicePrivateIP,port:target.port,path,method,signal,agent:false,headers:body?{'Content-Type':'application/json; charset=utf-8','Content-Length':body.length}:{}},res=>{
       const chunks:Buffer[]=[]; let size=0;
       res.on('data',(data:Buffer)=>{size+=data.length;if(size>64*1024*1024){req.destroy(new Error('文件响应超过缓存上限'));return;} chunks.push(data);});
       res.on('error',reject);
-      res.on('end',()=>{if((res.statusCode??500)<200||(res.statusCode??500)>=300) reject(new Error(`设备 HTTP ${res.statusCode}`));else resolve({data:Buffer.concat(chunks),headers:res.headers});});
+      res.on('aborted',()=>reject(new Error('设备响应提前中断')));
+      res.on('end',()=>{diagnostic('http.response',{requestId,status:res.statusCode,contentType:res.headers['content-type'],bytes:size,elapsedMs:Date.now()-queued});if((res.statusCode??500)<200||(res.statusCode??500)>=300) reject(new Error(`设备 HTTP ${res.statusCode}`));else resolve({data:Buffer.concat(chunks),headers:res.headers});});
     });
     req.setTimeout(timeout,()=>req.destroy(new Error('设备请求超时，写操作请刷新后核对结果')));
     req.on('error',reject);req.end(body);
-  }));
+  })).catch(error=>{diagnostic('http.error',{requestId,target:deviceDetails(target),path,method,elapsedMs:Date.now()-queued,error},'error');throw error;});
 }
 export async function command(target:Pick<Target,'DevicePrivateIP'|'port'|'apiPath'|'DeviceId'|'localToken'>, Command:string, fields:Record<string,unknown>={},signal?:AbortSignal):Promise<any> {
   const body=Buffer.from(JSON.stringify({Command,DeviceId:target.DeviceId,...(target.localToken===undefined?{}:{LocalToken:target.localToken}),...fields}));
-  const {data}=await request(target,target.apiPath,'POST',body,signal);
-  if(data.length>65536) throw new Error('设备 JSON 响应超过 64 KiB');
-  let result; try {result=JSON.parse(data.toString('utf8'));}catch{throw new Error('设备返回了无效 JSON');}
-  if(result.ReturnCode!==0) throw new Error(result.ReturnMessage || '设备未确认操作成功');
-  return result;
+  const commandId=randomUUID(),started=Date.now();let response:Buffer|undefined;
+  diagnostic('command.start',{commandId,target:deviceDetails(target),request:JSON.parse(body.toString('utf8'))});
+  try{
+    const {data}=await request(target,target.apiPath,'POST',body,signal);response=data;
+    if(data.length>65536)throw new Error('设备 JSON 响应超过 64 KiB');
+    let result;try{result=JSON.parse(data.toString('utf8'));}catch{throw new Error('设备返回了无效 JSON');}
+    diagnostic('command.response',{commandId,Command,target:deviceDetails(target),elapsedMs:Date.now()-started,response:result});
+    if(result.ReturnCode!==0)throw new Error(result.ReturnMessage||'设备未确认操作成功');
+    return result;
+  }catch(error){diagnostic('command.error',{commandId,Command,target:deviceDetails(target),elapsedMs:Date.now()-started,error,responseBytes:response?.length,responseTruncated:(response?.length??0)>65536,response:response?.subarray(0,65536).toString('utf8')},'error');throw error;}
 }
 export async function discover():Promise<Device[]> {
+  diagnostic('discovery.start');
   const response=await fetch('http://app.divoom-gz.com/Device/ReturnSameLANDevice',{signal:AbortSignal.timeout(8000)});
   if(!response.ok) throw new Error('设备发现服务不可用，可手动输入 IP');
   const result=await response.json() as {DeviceList?:Device[]};
-  return (result.DeviceList??[]).filter(d=>isIPv4(d.DevicePrivateIP)&&isSupportedHardware(Number(d.Hardware)));
+  const devices=(result.DeviceList??[]).filter(d=>isIPv4(d.DevicePrivateIP)&&isSupportedHardware(Number(d.Hardware)));
+  diagnostic('discovery.result',{total:result.DeviceList?.length??0,supported:devices.map(deviceDetails)});return devices;
 }
 export async function connect(device:Partial<Device>&{DevicePrivateIP:string;localToken?:number},send=command):Promise<Target> {
   const route=endpoint(device);
@@ -68,7 +80,7 @@ export async function connect(device:Partial<Device>&{DevicePrivateIP:string;loc
   const hw=await send(base,'Device/GetHardwareVersion');
   if(!isSupportedHardware(Number(hw.Hardware??base.Hardware)))throw new Error('目前仅支持 TimsFrame（510/511/512）和 AstroToo（530）');
   let caps:any={};
-  try {caps=await send(base,'Device/GetLanCapabilities');}catch{ /* 老固件仍允许展示硬件信息。 */ }
+  try {caps=await send(base,'Device/GetLanCapabilities');}catch(error){diagnostic('device.capabilities.unavailable',{target:deviceDetails(base),error},'warn'); /* 老固件仍允许展示硬件信息。 */ }
   const width=Number(hw.CanvasWidth??caps.CanvasWidth),height=Number(hw.CanvasHeight??caps.CanvasHeight);
   if(!Number.isInteger(width)||!Number.isInteger(height)||width<2||height<2||width>4096||height>4096) throw new Error('设备未返回有效屏幕尺寸，请升级支持本地相簿的固件');
   const Hardware=Number(hw.Hardware??base.Hardware),DeviceId=Number(hw.DeviceId??caps.DeviceId??base.DeviceId)||0;
@@ -83,11 +95,13 @@ export async function albums(target:Target):Promise<Album[]> {
     throw error;
   }
   if(!Array.isArray(result.AlbumList)) throw new Error('固件尚未提供本地相簿列表接口');
+  diagnostic('albums.result',{target:deviceDetails(target),count:result.AlbumList.length},result.AlbumList.length?'info':'warn');
   return result.AlbumList;
 }
 export async function photos(target:Target,clockId:number,start=1):Promise<Photo[]> {
   const result=await command(target,'Photo/GetPhotoList',{ClockId:clockId,ParentClockId:0,ParentItemId:'0',StartNum:start,EndNum:start+49});
   if(!Array.isArray(result.PhotoList)) throw new Error('照片列表响应不完整');
+  diagnostic('photos.result',{target:deviceDetails(target),clockId,start,count:result.PhotoList.length});
   return result.PhotoList;
 }
 export function filePath(value:string):string {
@@ -102,13 +116,14 @@ export async function upload(target:Target,metadata:Record<string,unknown>,files
   const tail=Buffer.from(`--${boundary}--\r\n`);
   const total=parts.reduce((n,p)=>n+p.header.length+p.length+2,tail.length);
   if(total>Math.min(target.maxUploadBytes,MAX_UPLOAD_BYTES)) throw new Error('视频和预览图超过设备上传大小上限，请缩短片段或升级固件');
+  const uploadId=randomUUID(),uploadStarted=Date.now();diagnostic('upload.start',{uploadId,target:deviceDetails(target),metadata,files:parts.filter(p=>p.path).map(p=>({name:basename(p.path!),bytes:p.length})),totalBytes:total});
   await withDeviceConnection(target,()=>new Promise<void>((resolve,reject)=>{
     let sent=0;const req=http.request({host:target.DevicePrivateIP,port:target.port,path:'/upload',method:'POST',signal,agent:false,headers:{'Content-Type':`multipart/form-data; boundary=${boundary}`,'Content-Length':total}},res=>{
       let response='';res.setEncoding('utf8');res.on('data',chunk=>{response+=chunk;if(response.length>65536)req.destroy(new Error('上传响应过大'));});res.on('error',reject);
-      res.on('end',()=>{try{if(res.statusCode!==200)throw new Error(`上传 HTTP ${res.statusCode}`);const result=JSON.parse(response);if(result.ReturnCode!==0)throw new Error(result.ReturnMessage||'设备拒绝上传');resolve();}catch(e){reject(e);}});
+      res.on('end',()=>{diagnostic('upload.response',{uploadId,status:res.statusCode,response,elapsedMs:Date.now()-uploadStarted});try{if(res.statusCode!==200)throw new Error(`上传 HTTP ${res.statusCode}`);const result=JSON.parse(response);if(result.ReturnCode!==0)throw new Error(result.ReturnMessage||'设备拒绝上传');resolve();}catch(e){reject(e);}});
     });
     req.setTimeout(120000,()=>req.destroy(new Error('上传连接超时，结果待确认')));req.on('error',reject);
     const write=async(chunk:Buffer)=>{if(signal.aborted)throw new Error('已取消');if(!req.write(chunk))await new Promise<void>((ok,fail)=>{const done=()=>{req.off('error',error);ok();};const error=(e:Error)=>{req.off('drain',done);fail(e);};req.once('drain',done);req.once('error',error);});sent+=chunk.length;onProgress(Math.min(99,sent/total*100));};
     void (async()=>{try{for(const part of parts){await write(part.header);if(part.data)await write(part.data);else{for await(const chunk of createReadStream(part.path!,{highWaterMark:64*1024,signal}))await write(chunk as Buffer);}await write(Buffer.from('\r\n'));}await write(tail);req.end();}catch(e){req.destroy(e as Error);reject(e);}})();
-  }));
+  })).catch(error=>{diagnostic('upload.error',{uploadId,target:deviceDetails(target),elapsedMs:Date.now()-uploadStarted,error},'error');throw error;});
 }

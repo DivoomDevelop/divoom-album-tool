@@ -1,4 +1,4 @@
-name: Final platform release
+name: Final Windows release
 on:
   workflow_dispatch:
 permissions:
@@ -33,12 +33,6 @@ jobs:
           - os: windows-2022
             platform: win-x64
             command: dist:win
-          - os: macos-15
-            platform: macos-arm64
-            command: dist:mac
-          - os: macos-15-intel
-            platform: macos-x64
-            command: dist:mac
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
     env:

@@ -1,4 +1,6 @@
 /** Tauri 独立媒体进程：stdin/stdout 为 JSON RPC，媒体通过随机令牌的 loopback URL 读取。 */
+import appPackage from '../package.json';
+import {diagnostic,diagnosticContext,initializeDiagnostics,deviceDetails} from './diagnostics';
 import { createServer } from 'node:http';
 import { createReadStream } from 'node:fs';
 import { mkdir, readFile, writeFile, stat } from 'node:fs/promises';
@@ -19,6 +21,10 @@ import { addPhotosToAlbum } from './albums';
 const dataRoot=resolve(process.argv[2]??'artifacts/worker-data'),binRoot=resolve(process.argv[3]??'vendor');
 const binary=(name:string)=>join(binRoot,name+(process.platform==='win32'?'.exe':''));
 const dataPath=(name:string)=>join(dataRoot,name);
+const logRoot=resolve(process.argv[4]??dataPath('logs'));
+initializeDiagnostics(logRoot,{version:appPackage.version,platform:process.platform,arch:process.arch,node:process.version,dataRoot,binRoot,logRoot});
+process.on('uncaughtExceptionMonitor',error=>diagnostic('worker.uncaught',{error},'error'));
+process.on('exit',code=>diagnostic('worker.exit',{code}));
 const cache=new DeviceCache(dataPath('devices-cache'));
 const history=new UploadHistory(dataPath('upload-history'));
 const batches=new Map<string,{ids:string[];signature:string}>();
@@ -26,7 +32,9 @@ const mediaKey=(photo:Photo)=>`${photo.PhotoId}:${photo.Time}:${photo.FileId}:${
 async function original(target:Target,photo:Photo):Promise<string>{
   const source=lan.filePath(photo.OriginalFileId??photo.FileId);
   return cache.file(target,mediaKey(photo),extname(source),temporary=>lan.withDeviceConnection(target,async()=>{
+    diagnostic('media.download.start',{target:deviceDetails(target),source});
     const response=await fetch(`http://${target.DevicePrivateIP}:${target.port}${source}`,{signal:AbortSignal.timeout(10*60*1000),headers:{Connection:'close'}});
+    diagnostic('media.download.response',{target:deviceDetails(target),source,status:response.status,contentType:response.headers.get('content-type'),contentLength:response.headers.get('content-length')});
     if(!response.ok||!response.body){await response.body?.cancel();throw new Error(`读取原文件失败 ${response.status}`);}
     await pipeline(Readable.fromWeb(response.body as any),createWriteStream(temporary));
     await probe(binary('ffprobe'),temporary);
@@ -88,9 +96,9 @@ async function processQueue(){
     try{
       const media=imports.get(edit.mediaId);if(!media)throw new Error('源文件已失效，请重新导入');
       if(media.sourceKey&&await sourceFingerprint(media.path)!==media.sourceKey)throw new Error('源文件无效，请重新导入');
-      job.state='正在转换';broadcast();
+      diagnostic('job.convert.start',{jobId:job.id,target:deviceDetails(target),edit});job.state='正在转换';broadcast();
       const output=await convert(binary('ffmpeg'),binary('ffprobe'),media,edit,target,dataPath(`exports/${job.id}`),abort.signal,n=>{job.progress=n;broadcast();});
-      job.state='正在上传';job.progress=0;broadcast();
+      diagnostic('job.convert.done',{jobId:job.id,output});job.state='正在上传';job.progress=0;broadcast();
       const now=Date.now();
       const metadata={Command:'Photo/LocalAddToAlbum',DeviceId:target.DeviceId,UserId:1,ClockId:album.ClockId,ParentClockId:0,ParentItemId:'0',PhotoTitle:'',PhotoX:0,PhotoY:0,PhotoWidth:output.width,PhotoHeight:output.height,PhotoTotalCnt:1,PhotoIndex:0,SendTime:now,TakingTime:(await stat(media.path)).mtimeMs,PhotoFlag:now%2147483647,FileName:basename(output.file),PreviewFileName:output.cover?basename(output.cover):''};
       try{await lan.upload(target,metadata,[output.file,...(output.cover?[output.cover]:[])],abort.signal,n=>{job.progress=n;broadcast();});}
@@ -112,8 +120,8 @@ async function processQueue(){
       if(!found)throw new Error('设备已接收文件，尚未确认入库，请刷新核对，勿重复上传');
       await writeFile(receipt,JSON.stringify({deviceId:target.DeviceId,sourceKey:media.sourceKey,metadata,state:'confirmed',albums:[...confirmed].map(([clockId,photo])=>({clockId,...photo}))},null,2));
       if(media.sourceKey)await history.confirm(target,media.sourceKey,confirmed.get(allAlbum!.ClockId)!);
-      await cache.invalidateLists(target);job.state='已完成';job.progress=100;
-    }catch(e){job.state=abort.signal.aborted?'已取消':'需检查';job.error=(e as Error).message;}
+      await cache.invalidateLists(target);job.state='已完成';job.progress=100;diagnostic('job.completed',{jobId:job.id,target:deviceDetails(target),photoId:job.photoId});
+    }catch(e){job.state=abort.signal.aborted?'已取消':'需检查';job.error=(e as Error).message;diagnostic('job.error',{jobId:job.id,target:deviceDetails(target),state:job.state,error:e},'error');}
     finally{controllers.delete(job.id);broadcast();}
   }}finally{working=false;}
 }
@@ -194,7 +202,15 @@ async function main(){
   await mkdir(dataPath('cache'),{recursive:true});
   await new Promise<void>(ok=>server.listen(0,'127.0.0.1',ok));port=(server.address() as any).port;
   const input=createInterface({input:process.stdin});
-  input.on('line',line=>{void(async()=>{let id;try{const message=JSON.parse(line);id=message.id;const result=await dispatch(message.method,message.args??[]);emit({id,result});}catch(e){emit({id,error:(e as Error).message});}})();});
+  input.on('line',line=>{void(async()=>{
+    let message:any;try{message=JSON.parse(line);}catch(error){diagnostic('rpc.invalid',{error},'error');emit({error:(error as Error).message});return;}
+    await diagnosticContext(message.id,message.method,async()=>{
+      const started=Date.now(),poll=message.method==='jobs';
+      if(!poll)diagnostic('rpc.start',{target:deviceDetails(message.args?.[0]),args:message.args});
+      try{const result=await dispatch(message.method,message.args??[]);if(!poll)diagnostic('rpc.success',{elapsedMs:Date.now()-started,target:deviceDetails(message.args?.[0]),result});emit({id:message.id,result});}
+      catch(error){diagnostic('rpc.error',{elapsedMs:Date.now()-started,target:deviceDetails(message.args?.[0]),error},'error');emit({id:message.id,error:(error as Error).message});}
+    });
+  })();});
   input.on('close',()=>{for(const c of controllers.values())c.abort();server.close();setTimeout(()=>process.exit(),300).unref();});
 }
-void main().catch(e=>{emit({event:'fatal',error:String(e)});process.exitCode=1;});
+void main().catch(e=>{diagnostic('worker.fatal',{error:e},'error');emit({event:'fatal',error:String(e)});process.exitCode=1;});

@@ -62,11 +62,28 @@ fn main() {
             let installed = std::env::current_exe()?.parent().unwrap().join(format!("timesframe-worker{suffix}"));
             let triple = if cfg!(windows) {"x86_64-pc-windows-msvc"} else if cfg!(target_arch="aarch64") {"aarch64-apple-darwin"} else {"x86_64-apple-darwin"};
             let worker = if installed.exists() {installed} else {dev_root.join(format!("src-tauri/binaries/timesframe-worker-{triple}{suffix}"))};
+            let application_logs=std::env::current_exe()?.parent().unwrap().join("logs");
+            let open_log=|directory:&std::path::Path| -> std::io::Result<std::fs::File> {
+                std::fs::create_dir_all(directory)?;
+                let file=directory.join("worker.log");
+                if std::fs::metadata(&file).map(|m|m.len()>5*1024*1024).unwrap_or(false) {
+                    let _=std::fs::remove_file(directory.join("worker.log.3"));
+                    for i in (1..3).rev() {let _=std::fs::rename(directory.join(format!("worker.log.{i}")),directory.join(format!("worker.log.{}",i+1)));}
+                    let _=std::fs::rename(&file,directory.join("worker.log.1"));
+                }
+                std::fs::OpenOptions::new().create(true).append(true).open(file)
+            };
+            let (log_directory,mut stderr_log)=match open_log(&application_logs) {
+                Ok(file)=>(application_logs,file),
+                Err(error)=>{let fallback=data.join("logs");let mut file=open_log(&fallback)?;let _=writeln!(file,"Application log directory unavailable: {error}; using {}",fallback.display());(fallback,file)}
+            };
+            let _=writeln!(stderr_log,"\n[unix {}] Starting media worker: {} | logs: {}",std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs(),worker.display(),log_directory.display());
+            let mut native_log=stderr_log.try_clone()?;
             let mut command = Command::new(worker);
             let script=node_path(&script);
-            command.current_dir(script.parent().unwrap()).arg(&script).arg(node_path(&data)).arg(node_path(&bin)).stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::from(std::fs::File::create(data.join("worker.log"))?));
+            command.current_dir(script.parent().unwrap()).arg(&script).arg(node_path(&data)).arg(node_path(&bin)).arg(node_path(&log_directory)).stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::from(stderr_log));
             #[cfg(windows)] {use std::os::windows::process::CommandExt; command.creation_flags(0x08000000);}
-            let mut child = command.spawn()?;
+            let mut child = command.spawn().map_err(|error| {let _=writeln!(native_log,"Media worker spawn failed: {error}");error})?;
             let input = child.stdin.take().unwrap();
             let output = child.stdout.take().unwrap();
             let pending: Arc<Mutex<HashMap<u64,oneshot::Sender<Reply>>>> = Arc::new(Mutex::new(HashMap::new()));
@@ -83,6 +100,7 @@ fn main() {
                         }
                     }
                 }
+                let _=writeln!(native_log,"Media worker stdout closed; pending requests will fail");
                 for (_,sender) in replies.lock().unwrap().drain() {let _=sender.send(Err("本地媒体服务已退出，请重新启动 TimesFrame".into()));}
             });
             app.manage(Worker{child:Mutex::new(child),input:Mutex::new(input),pending,next:AtomicU64::new(1)});
