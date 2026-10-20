@@ -1,5 +1,21 @@
 # Divoom 相簿 PC 工具
 
+## 下载安装 / Downloads
+
+**按电脑系统点击下载，无需登录 GitHub。** 安装包已内置媒体服务、Node.js、FFmpeg 和 ffprobe，下载安装即可使用。
+
+| 电脑系统 | 安装包下载 | 版本与系统要求 |
+| --- | --- | --- |
+| Windows | **[下载 Windows 安装包（EXE）](https://github.com/DivoomDevelop/divoom-album-tool/releases/download/v0.3.7/DivoomAlbum-0.3.7-x64-setup.exe)** | v0.3.7 · Windows 10/11，64 位（x64），需要 WebView2 |
+| Mac Apple 芯片 | **[下载 Mac Apple 芯片版（DMG）](https://github.com/DivoomDevelop/divoom-album-tool/releases/download/v0.3.6/DivoomAlbum-macos-arm64-v0.3.6.dmg)** | v0.3.6 · M 系列芯片，macOS 13.5 或更新版本 |
+| Mac Intel | **[下载 Mac Intel 版（DMG）](https://github.com/DivoomDevelop/divoom-album-tool/releases/download/v0.3.6/DivoomAlbum-macos-x64-v0.3.6.dmg)** | v0.3.6 · Intel 处理器，macOS 13.5 或更新版本 |
+
+Windows：下载后双击 EXE，按提示安装。Mac：点击左上角苹果菜单 →“关于本机”查看芯片类型；下载对应 DMG，打开后将应用拖入“应用程序”。Mac 包尚未通过 Apple 公证，首次打开可能需要在“系统设置 → 隐私与安全性”中允许打开。
+
+使用时，请将电脑与设备连接到同一个局域网。支持 TimsFrame（510/511/512）和 AstroToo（530）。
+
+[Windows 免安装 ZIP](https://github.com/DivoomDevelop/divoom-album-tool/releases/download/v0.3.7/DivoomAlbum-win-x64-v0.3.7.zip)（完整解压后运行 `DivoomAlbum.exe`） · [全部版本、更新说明及 SHA-256 校验文件](https://github.com/DivoomDevelop/divoom-album-tool/releases)
+
 使用 **Tauri 2 + React + TypeScript**。媒体服务作为随应用打包的独立进程运行，内置 Node.js、FFmpeg 和 ffprobe，目标电脑无需安装这些依赖。
 
 ## 诊断日志
